@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PulsePlate – Your pulse → perfect plate</title>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --border: #2d3a4d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --accent-hover: #79b8ff;
+      --success: #3fb950;
+      --error: #f85149;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+    .container {
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem;
+    }
+    h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 0.25rem 0; }
+    h2 { font-size: 1rem; font-weight: 600; margin: 0 0 0.75rem 0; color: var(--muted); }
+    .tagline {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-bottom: 2rem;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+    }
+    .status {
+      font-size: 0.875rem;
+      color: var(--muted);
+      margin-bottom: 1rem;
+    }
+    .status.connected { color: var(--success); }
+    .status.error { color: var(--error); }
+    .status.loading { color: var(--muted); }
+    a.button, button.primary {
+      display: inline-block;
+      background: var(--accent);
+      color: #fff;
+      text-decoration: none;
+      padding: 0.6rem 1.2rem;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      font-weight: 500;
+      border: none;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    a.button:hover, button.primary:hover {
+      background: var(--accent-hover);
+    }
+    button.primary:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    button.secondary {
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--border);
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      font-size: 0.875rem;
+      cursor: pointer;
+      margin-top: 0.5rem;
+    }
+    button.secondary:hover { border-color: var(--accent); }
+    .form-group { margin-bottom: 1rem; }
+    .form-group label {
+      display: block;
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 0.35rem;
+    }
+    .form-group input[type="number"],
+    .form-group input[type="text"],
+    .form-group select {
+      width: 100%;
+      max-width: 240px;
+      padding: 0.5rem 0.6rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 0.9rem;
+    }
+    .form-group input:focus, .form-group select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .checkbox-group { display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; }
+    .checkbox-group label {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.9rem;
+      color: var(--text);
+      cursor: pointer;
+      margin: 0;
+    }
+    .checkbox-group input[type="checkbox"] { margin: 0; }
+    #planResult { display: none; margin-top: 1.5rem; }
+    #planResult.visible { display: block; }
+    .summary { margin-bottom: 1.25rem; color: var(--muted); font-size: 0.9rem; }
+    .meals h3, .grocery h3 { font-size: 0.95rem; margin: 0 0 0.5rem 0; }
+    .meal { margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border); }
+    .meal:last-child { border-bottom: none; }
+    .meal-type { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+    .meal-name { font-weight: 600; }
+    .meal-desc { font-size: 0.85rem; color: var(--muted); margin-top: 0.2rem; }
+    .meal-cal { font-size: 0.8rem; color: var(--muted); }
+    .grocery ul { margin: 0; padding-left: 1.25rem; font-size: 0.9rem; color: var(--muted); }
+    .grocery li { margin-bottom: 0.25rem; }
+    .biometrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 0.75rem;
+      font-size: 0.85rem;
+    }
+    .biometric-item {
+      background: var(--bg);
+      padding: 0.5rem 0.75rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+    .biometric-item .label { color: var(--muted); font-size: 0.75rem; }
+    .biometric-item .value { font-weight: 600; }
+    .loading-inline { color: var(--muted); font-style: italic; }
+    #biometricsContent.error { color: var(--error); }
+    .message { margin-top: 1rem; padding: 0.75rem; border-radius: 6px; font-size: 0.9rem; }
+    .message.success { background: rgba(63, 185, 80, 0.15); color: var(--success); }
+    .message.error { background: rgba(248, 81, 73, 0.15); color: var(--error); }
+    .prefs-saved { font-size: 0.8rem; color: var(--success); margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>PulsePlate</h1>
+    <p class="tagline">Your pulse → perfect plate. Same-day meal plan from your Oura data.</p>
+
+    <!-- Connection -->
+    <div class="card">
+      <div id="status" class="status loading">Checking Oura connection…</div>
+      <a id="connectBtn" href="/auth/oura/authorize" class="button" style="display: none;">Connect Oura</a>
+      <div id="actions" style="display: none;">
+        <button type="button" class="primary" id="getPlanBtn">Get today's plan</button>
+      </div>
+    </div>
+
+    <!-- Today's biometrics (when connected) -->
+    <div id="biometricsCard" class="card" style="display: none;">
+      <h2>Today's biometrics</h2>
+      <div id="biometricsContent" class="loading-inline">Loading…</div>
+    </div>
+
+    <!-- Preferences (when connected) -->
+    <div id="prefsCard" class="card" style="display: none;">
+      <h2>Your preferences</h2>
+      <p class="status" style="margin-bottom: 0.75rem;">These are used when you generate a meal plan. Save to update.</p>
+      <div class="form-group">
+        <label>Diet style</label>
+        <select id="dietStyle">
+          <option value="balanced">Balanced</option>
+          <option value="mediterranean">Mediterranean</option>
+          <option value="keto">Keto</option>
+          <option value="vegan">Vegan</option>
+          <option value="paleo">Paleo</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Daily calorie target</label>
+        <input type="number" id="calorieTarget" min="1000" max="5000" step="100" value="2000">
+      </div>
+      <div class="form-group">
+        <label>Goals</label>
+        <div class="checkbox-group">
+          <label><input type="checkbox" id="goalFatLoss" value="fat_loss"> Fat loss</label>
+          <label><input type="checkbox" id="goalMuscle" value="muscle_gain"> Muscle gain</label>
+          <label><input type="checkbox" id="goalGlucose" value="stable_glucose"> Stable glucose</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Allergies (comma-separated, e.g. nuts, dairy)</label>
+        <input type="text" id="allergies" placeholder="none">
+      </div>
+      <button type="button" class="secondary" id="savePrefsBtn">Save preferences</button>
+      <div id="prefsSaved" class="prefs-saved" style="display: none;">Saved.</div>
+    </div>
+
+    <!-- Plan result -->
+    <div id="planResult" class="card">
+      <p class="summary" id="planSummary"></p>
+      <div class="meals" id="planMeals"></div>
+      <div class="grocery" id="planGrocery"></div>
+    </div>
+
+    <div id="message"></div>
+  </div>
+
+  <script>
+    const statusEl = document.getElementById('status');
+    const connectBtn = document.getElementById('connectBtn');
+    const actionsEl = document.getElementById('actions');
+    const getPlanBtn = document.getElementById('getPlanBtn');
+    const biometricsCard = document.getElementById('biometricsCard');
+    const biometricsContent = document.getElementById('biometricsContent');
+    const prefsCard = document.getElementById('prefsCard');
+    const dietStyle = document.getElementById('dietStyle');
+    const calorieTarget = document.getElementById('calorieTarget');
+    const goalFatLoss = document.getElementById('goalFatLoss');
+    const goalMuscle = document.getElementById('goalMuscle');
+    const goalGlucose = document.getElementById('goalGlucose');
+    const allergiesInput = document.getElementById('allergies');
+    const savePrefsBtn = document.getElementById('savePrefsBtn');
+    const prefsSavedEl = document.getElementById('prefsSaved');
+    const planResult = document.getElementById('planResult');
+    const planSummary = document.getElementById('planSummary');
+    const planMeals = document.getElementById('planMeals');
+    const planGrocery = document.getElementById('planGrocery');
+    const messageEl = document.getElementById('message');
+
+    function showMessage(text, type) {
+      messageEl.textContent = text;
+      messageEl.className = 'message ' + (type || '');
+      messageEl.style.display = 'block';
+    }
+    function hideMessage() {
+      messageEl.style.display = 'none';
+    }
+
+    async function checkConnection() {
+      statusEl.classList.add('loading');
+      statusEl.classList.remove('connected', 'error');
+      try {
+        const r = await fetch('/biometrics/oura');
+        if (r.ok) {
+          statusEl.textContent = 'Oura connected.';
+          statusEl.classList.remove('loading');
+          statusEl.classList.add('connected');
+          connectBtn.style.display = 'none';
+          actionsEl.style.display = 'block';
+          biometricsCard.style.display = 'block';
+          prefsCard.style.display = 'block';
+          loadBiometrics();
+          loadPreferences();
+        } else {
+          const err = await r.json().catch(() => ({}));
+          statusEl.textContent = 'Connect your Oura account to get personalized meal plans.';
+          statusEl.classList.remove('loading');
+          connectBtn.style.display = 'inline-block';
+          actionsEl.style.display = 'none';
+          biometricsCard.style.display = 'none';
+          prefsCard.style.display = 'none';
+        }
+      } catch (_) {
+        statusEl.textContent = 'Connect your Oura account to get personalized meal plans.';
+        statusEl.classList.remove('loading');
+        connectBtn.style.display = 'inline-block';
+        actionsEl.style.display = 'none';
+        biometricsCard.style.display = 'none';
+        prefsCard.style.display = 'none';
+      }
+    }
+
+    async function loadBiometrics() {
+      biometricsContent.innerHTML = '<span class="loading-inline">Loading…</span>';
+      biometricsContent.classList.remove('error');
+      try {
+        const r = await fetch('/biometrics/oura');
+        const data = await r.json();
+        if (r.ok) {
+          biometricsContent.innerHTML = `
+            <div class="biometrics-grid">
+              <div class="biometric-item"><span class="label">Sleep score</span><div class="value">${Math.round(data.sleep_score)}</div></div>
+              <div class="biometric-item"><span class="label">Recovery</span><div class="value">${data.recovery_status}</div></div>
+              <div class="biometric-item"><span class="label">HRV</span><div class="value">${data.hrv_ms} ms</div></div>
+              <div class="biometric-item"><span class="label">Resting HR</span><div class="value">${data.resting_hr_bpm} bpm</div></div>
+              <div class="biometric-item"><span class="label">Steps (yesterday)</span><div class="value">${data.steps_yesterday?.toLocaleString() ?? '—'}</div></div>
+            </div>
+          `;
+        } else {
+          biometricsContent.textContent = 'Could not load biometrics. ' + (data.detail || r.statusText);
+          biometricsContent.classList.add('error');
+        }
+      } catch (e) {
+        biometricsContent.textContent = 'Failed to load biometrics.';
+        biometricsContent.classList.add('error');
+      }
+    }
+
+    async function loadPreferences() {
+      try {
+        const r = await fetch('/preferences');
+        const data = await r.json();
+        if (r.ok) {
+          dietStyle.value = data.diet_style || 'balanced';
+          calorieTarget.value = data.calorie_target ?? 2000;
+          const goals = data.goals || [];
+          goalFatLoss.checked = goals.includes('fat_loss');
+          goalMuscle.checked = goals.includes('muscle_gain');
+          goalGlucose.checked = goals.includes('stable_glucose');
+          allergiesInput.value = Array.isArray(data.allergies) ? data.allergies.join(', ') : (data.allergies || '');
+        }
+      } catch (_) {}
+    }
+
+    savePrefsBtn.addEventListener('click', async () => {
+      const goals = [];
+      if (goalFatLoss.checked) goals.push('fat_loss');
+      if (goalMuscle.checked) goals.push('muscle_gain');
+      if (goalGlucose.checked) goals.push('stable_glucose');
+      const allergiesStr = allergiesInput.value.trim();
+      const allergies = allergiesStr ? allergiesStr.split(',').map(s => s.trim()).filter(Boolean) : null;
+      try {
+        const r = await fetch('/preferences', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            goals,
+            diet_style: dietStyle.value,
+            calorie_target: parseInt(calorieTarget.value, 10) || 2000,
+            allergies,
+          }),
+        });
+        if (r.ok) {
+          prefsSavedEl.style.display = 'block';
+          setTimeout(() => { prefsSavedEl.style.display = 'none'; }, 2000);
+        } else {
+          const data = await r.json().catch(() => ({}));
+          showMessage(data.detail || 'Failed to save preferences.', 'error');
+        }
+      } catch (e) {
+        showMessage('Failed to save preferences. Try again.', 'error');
+      }
+    });
+
+    function renderPlan(data) {
+      planSummary.textContent = data.summary || '';
+      planMeals.innerHTML = '<h3>Meals</h3>';
+      (data.meals || []).forEach(m => {
+        const div = document.createElement('div');
+        div.className = 'meal';
+        div.innerHTML =
+          '<span class="meal-type">' + (m.type || '') + '</span><br>' +
+          '<span class="meal-name">' + (m.name || '') + '</span>' +
+          (m.calories ? '<span class="meal-cal"> · ' + m.calories + ' kcal</span>' : '') +
+          (m.description ? '<p class="meal-desc">' + m.description + '</p>' : '');
+        planMeals.appendChild(div);
+      });
+      planGrocery.innerHTML = '<h3>Grocery list</h3><ul></ul>';
+      const ul = planGrocery.querySelector('ul');
+      (data.grocery_list || []).forEach(g => {
+        const li = document.createElement('li');
+        li.textContent = (g.quantity ? g.quantity + ' – ' : '') + (g.item || '');
+        ul.appendChild(li);
+      });
+      planResult.classList.add('visible');
+    }
+
+    getPlanBtn.addEventListener('click', async () => {
+      hideMessage();
+      getPlanBtn.disabled = true;
+      getPlanBtn.textContent = 'Generating…';
+      try {
+        const r = await fetch('/generate-meal-plan/from-oura', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        const data = await r.json();
+        if (r.ok) {
+          renderPlan(data);
+          showMessage('Plan ready.', 'success');
+        } else {
+          let msg = 'Failed to generate plan.';
+          if (typeof data.detail === 'string') msg = data.detail;
+          else if (Array.isArray(data.detail) && data.detail.length) msg = data.detail.map(d => d.msg || d).join(' ');
+          else if (data.detail?.msg) msg = data.detail.msg;
+          showMessage(msg, 'error');
+        }
+      } catch (e) {
+        showMessage('Request failed. Check your connection and try again.', 'error');
+      } finally {
+        getPlanBtn.disabled = false;
+        getPlanBtn.textContent = "Get today's plan";
+      }
+    });
+
+    const params = new URLSearchParams(location.search);
+    if (params.get('oura') === 'connected') {
+      showMessage('Oura connected. You can get your meal plan below.', 'success');
+      history.replaceState({}, '', location.pathname);
+    }
+    if (params.get('oura_error')) {
+      showMessage('Oura connection failed: ' + params.get('oura_error'), 'error');
+      history.replaceState({}, '', location.pathname);
+    }
+
+    checkConnection();
+  </script>
+</body>
+</html>

@@ -37,7 +37,7 @@ venv.bak/
 .env.*.local
 .env.development
 .env.production
-*.env.example  # optional: keep if you want the template committed, but usually .env.example is committed
+# .env.example is committed as the template; only the real .env (above) is ignored
 
 # FastAPI / Uvicorn extras
 *.pid

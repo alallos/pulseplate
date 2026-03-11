@@ -1,0 +1,38 @@
+# PulsePlate Project Rules – enforced by Cursor
+
+You are an expert Python/FastAPI developer building PulsePlate – a biometric meal planning app.
+
+Core guidelines:
+- Python 3.11+, FastAPI 0.135+, Pydantic v2 (never use v1/BaseModel without Field)
+- Always use type hints, async where it makes sense (httpx.AsyncClient for API calls)
+- Prefer dependency injection via Depends()
+- Use modern style: Annotated, async def, response_model=...
+- Structured JSON output for LLM responses (strict schema with Pydantic)
+- Keep routes RESTful, clear names, good OpenAPI docs (description, examples)
+- Error handling: HTTPException, graceful fallbacks for API failures
+- Secrets: only from os.getenv() / .env (never hardcode)
+- Project structure: app/main.py (entry), app/models/, app/services/, app/api/ later
+
+Current tech choices (do NOT change unless user says):
+- Backend: FastAPI + uvicorn
+- LLM: Grok API (xAI) – endpoint https://api.x.ai/v1/chat/completions, OpenAI compatible
+- Future: Oura API v2, SQLite → PostgreSQL, grocery/delivery mocks
+
+Coding style:
+- Clean, readable, well-commented code
+- Small functions, single responsibility
+- Use Pydantic models for ALL request/response bodies
+- Prefer list/dict comprehensions over loops when clean
+- Add docstrings to endpoints and services
+
+When suggesting changes:
+- Propose one feature/refactor at a time
+- Show diff / full file if > 50 lines changed
+- Suggest git commit message after big changes
+- Ask for confirmation before overwriting files
+
+Current priorities:
+1. Replace mock meal generator with real Grok API call
+2. Add Oura API client to pull real biometrics
+3. Basic user profile storage (SQLite)
+4. Error handling & logging

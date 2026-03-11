@@ -24,6 +24,15 @@ class BiometricData(BaseModel):
     allergies: Optional[List[str]] = Field(default=None, description="e.g. ['nuts', 'dairy']")
 
 
+class MealPlanFromOuraOverrides(BaseModel):
+    """Optional overrides when generating a meal plan from Oura (biometrics from ring, rest from body)."""
+
+    goals: List[str] = Field(default_factory=list, description="e.g. ['fat_loss', 'stable_glucose']")
+    diet_style: str = Field(default="balanced", description="e.g. 'mediterranean', 'keto'")
+    calorie_target: int = Field(default=2000, gt=1000, description="Daily calorie goal")
+    allergies: Optional[List[str]] = Field(default=None, description="e.g. ['nuts', 'dairy']")
+
+
 class MealPlanResponse(BaseModel):
     """Structured output: meal plan + grocery list."""
 
