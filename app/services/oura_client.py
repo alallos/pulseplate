@@ -11,6 +11,34 @@ from app.models.biometrics import BiometricData
 
 OURA_API_BASE = "https://api.ouraring.com"
 
+
+async def fetch_oura_personal_info(access_token: str) -> dict[str, Any]:
+    """
+    Fetch Oura personal info (email, id) for the authenticated user.
+    Requires 'email' scope. Used after token exchange to resolve or create app user.
+    """
+    headers = {"Authorization": f"Bearer {access_token}"}
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        response = await client.get(
+            f"{OURA_API_BASE}/v2/usercollection/personal_info",
+            headers=headers,
+        )
+    if response.is_error:
+        try:
+            err = response.json()
+            msg = err.get("detail") or err.get("message") or response.text
+        except Exception:
+            msg = response.text or f"HTTP {response.status_code}"
+        raise HTTPException(
+            status_code=response.status_code if 400 <= response.status_code < 600 else 502,
+            detail=f"Oura personal_info: {msg}",
+        )
+    try:
+        return response.json()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Oura personal_info invalid JSON: {e!s}") from e
+
+
 # Map readiness score (0–100) to recovery_status
 def _score_to_recovery(score: int | float | None) -> str:
     if score is None:

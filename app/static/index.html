@@ -30,17 +30,46 @@
       margin: 0 auto;
       padding: 2rem 1.5rem;
     }
-    h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 0.25rem 0; }
-    h2 { font-size: 1rem; font-weight: 600; margin: 0 0 0.75rem 0; color: var(--muted); }
+    .header {
+      margin-bottom: 2rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      margin: 0 0 0.35rem 0;
+      letter-spacing: -0.02em;
+    }
     .tagline {
       color: var(--muted);
       font-size: 0.9rem;
-      margin-bottom: 2rem;
+      margin: 0;
     }
+    h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin: 0 0 0.75rem 0;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    h2 .toggle {
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--accent);
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0;
+    }
+    h2 .toggle:hover { text-decoration: underline; }
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: 10px;
       padding: 1.25rem 1.5rem;
       margin-bottom: 1rem;
     }
@@ -52,13 +81,19 @@
     .status.connected { color: var(--success); }
     .status.error { color: var(--error); }
     .status.loading { color: var(--muted); }
+    .status.connected::before {
+      content: "● ";
+      color: var(--success);
+    }
     a.button, button.primary {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
       background: var(--accent);
       color: #fff;
       text-decoration: none;
       padding: 0.6rem 1.2rem;
-      border-radius: 6px;
+      border-radius: 8px;
       font-size: 0.9rem;
       font-weight: 500;
       border: none;
@@ -68,11 +103,19 @@
     a.button:hover, button.primary:hover {
       background: var(--accent-hover);
     }
+    a.button:focus-visible, button.primary:focus-visible,
+    button.secondary:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
     button.primary:disabled {
       opacity: 0.6;
       cursor: not-allowed;
     }
     button.secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
       background: transparent;
       color: var(--accent);
       border: 1px solid var(--border);
@@ -83,6 +126,17 @@
       margin-top: 0.5rem;
     }
     button.secondary:hover { border-color: var(--accent); }
+    .spinner {
+      display: inline-block;
+      width: 1em;
+      height: 1em;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
     .form-group { margin-bottom: 1rem; }
     .form-group label {
       display: block;
@@ -105,6 +159,7 @@
     .form-group input:focus, .form-group select:focus {
       outline: none;
       border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
     }
     .checkbox-group { display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; }
     .checkbox-group label {
@@ -117,8 +172,18 @@
       margin: 0;
     }
     .checkbox-group input[type="checkbox"] { margin: 0; }
-    #planResult { display: none; margin-top: 1.5rem; }
+    #planResult {
+      display: none;
+      margin-top: 1.5rem;
+      animation: fadeIn 0.3s ease;
+    }
     #planResult.visible { display: block; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .plan-meta {
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-bottom: 1rem;
+    }
     .summary { margin-bottom: 1.25rem; color: var(--muted); font-size: 0.9rem; }
     .meals h3, .grocery h3 { font-size: 0.95rem; margin: 0 0 0.5rem 0; }
     .meal { margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border); }
@@ -143,25 +208,120 @@
     }
     .biometric-item .label { color: var(--muted); font-size: 0.75rem; }
     .biometric-item .value { font-weight: 600; }
+    .biometrics-actions { margin-top: 0.75rem; }
     .loading-inline { color: var(--muted); font-style: italic; }
     #biometricsContent.error { color: var(--error); }
-    .message { margin-top: 1rem; padding: 0.75rem; border-radius: 6px; font-size: 0.9rem; }
+    .prefs-body { overflow: hidden; transition: opacity 0.2s ease; }
+    .prefs-body.collapsed { display: none; }
+    .message {
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
     .message.success { background: rgba(63, 185, 80, 0.15); color: var(--success); }
     .message.error { background: rgba(248, 81, 73, 0.15); color: var(--error); }
-    .prefs-saved { font-size: 0.8rem; color: var(--success); margin-top: 0.5rem; }
+    .prefs-saved {
+      font-size: 0.85rem;
+      color: var(--success);
+      margin-top: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .prefs-saved::before { content: "✓"; font-weight: 700; }
+    .mode-tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 1rem;
+      background: var(--bg);
+      padding: 3px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      width: fit-content;
+    }
+    .mode-tabs button {
+      padding: 0.45rem 1rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+      border: none;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      transition: color 0.15s, background 0.15s;
+    }
+    .mode-tabs button:hover { color: var(--text); }
+    .mode-tabs button.active { background: var(--surface); color: var(--accent); }
+    .plan-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .plan-actions .form-group { margin-bottom: 0; }
+    .plan-actions select {
+      padding: 0.4rem 0.6rem;
+      font-size: 0.85rem;
+      max-width: none;
+    }
+    .plan-badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+    }
+    .day-block {
+      margin-bottom: 1.25rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .day-block:last-child { border-bottom: none; }
+    .day-block h4 {
+      font-size: 0.9rem;
+      font-weight: 600;
+      margin: 0 0 0.5rem 0;
+      color: var(--accent);
+    }
+    .day-block .meal { margin-bottom: 0.5rem; padding-bottom: 0.5rem; }
+    .grocery-item-weekly {
+      margin-bottom: 0.5rem;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    .grocery-item-weekly .prep { font-size: 0.8rem; color: var(--accent); margin-top: 0.15rem; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>PulsePlate</h1>
-    <p class="tagline">Your pulse → perfect plate. Same-day meal plan from your Oura data.</p>
+    <header class="header">
+      <h1>PulsePlate</h1>
+      <p class="tagline">Your pulse → perfect plate. Daily or weekly batch plans from your Oura data.</p>
+    </header>
 
     <!-- Connection -->
     <div class="card">
       <div id="status" class="status loading">Checking Oura connection…</div>
       <a id="connectBtn" href="/auth/oura/authorize" class="button" style="display: none;">Connect Oura</a>
       <div id="actions" style="display: none;">
-        <button type="button" class="primary" id="getPlanBtn">Get today's plan</button>
+        <div class="mode-tabs" role="tablist">
+          <button type="button" role="tab" id="modeDaily" class="active" aria-selected="true">Today</button>
+          <button type="button" role="tab" id="modeWeekly" aria-selected="false">Weekly prep</button>
+        </div>
+        <div class="plan-actions">
+          <div id="weeklyDaysWrap" class="form-group" style="display: none;">
+            <label for="weeklyDays">Days</label>
+            <select id="weeklyDays">
+              <option value="5">5 days</option>
+              <option value="6">6 days</option>
+              <option value="7" selected>7 days</option>
+            </select>
+          </div>
+          <button type="button" class="primary" id="getPlanBtn">Get today's plan</button>
+        </div>
       </div>
     </div>
 
@@ -169,46 +329,59 @@
     <div id="biometricsCard" class="card" style="display: none;">
       <h2>Today's biometrics</h2>
       <div id="biometricsContent" class="loading-inline">Loading…</div>
+      <div id="biometricsActions" class="biometrics-actions" style="display: none;">
+        <button type="button" class="secondary" id="refreshBiometricsBtn">Refresh</button>
+      </div>
     </div>
 
     <!-- Preferences (when connected) -->
     <div id="prefsCard" class="card" style="display: none;">
-      <h2>Your preferences</h2>
-      <p class="status" style="margin-bottom: 0.75rem;">These are used when you generate a meal plan. Save to update.</p>
-      <div class="form-group">
-        <label>Diet style</label>
-        <select id="dietStyle">
-          <option value="balanced">Balanced</option>
-          <option value="mediterranean">Mediterranean</option>
-          <option value="keto">Keto</option>
-          <option value="vegan">Vegan</option>
-          <option value="paleo">Paleo</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Daily calorie target</label>
-        <input type="number" id="calorieTarget" min="1000" max="5000" step="100" value="2000">
-      </div>
-      <div class="form-group">
-        <label>Goals</label>
-        <div class="checkbox-group">
-          <label><input type="checkbox" id="goalFatLoss" value="fat_loss"> Fat loss</label>
-          <label><input type="checkbox" id="goalMuscle" value="muscle_gain"> Muscle gain</label>
-          <label><input type="checkbox" id="goalGlucose" value="stable_glucose"> Stable glucose</label>
+      <h2>
+        Your preferences
+        <button type="button" class="toggle" id="prefsToggle" aria-expanded="true">Hide</button>
+      </h2>
+      <div id="prefsBody" class="prefs-body">
+        <p class="status" style="margin-bottom: 0.75rem;">Used when you generate a meal plan. Save to update.</p>
+        <div class="form-group">
+          <label>Diet style</label>
+          <select id="dietStyle">
+            <option value="balanced">Balanced</option>
+            <option value="mediterranean">Mediterranean</option>
+            <option value="keto">Keto</option>
+            <option value="vegan">Vegan</option>
+            <option value="paleo">Paleo</option>
+          </select>
         </div>
+        <div class="form-group">
+          <label>Daily calorie target</label>
+          <input type="number" id="calorieTarget" min="1000" max="5000" step="100" value="2000">
+        </div>
+        <div class="form-group">
+          <label>Goals</label>
+          <div class="checkbox-group">
+            <label><input type="checkbox" id="goalFatLoss" value="fat_loss"> Fat loss</label>
+            <label><input type="checkbox" id="goalMuscle" value="muscle_gain"> Muscle gain</label>
+            <label><input type="checkbox" id="goalGlucose" value="stable_glucose"> Stable glucose</label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Allergies (comma-separated, e.g. nuts, dairy)</label>
+          <input type="text" id="allergies" placeholder="none">
+        </div>
+        <button type="button" class="secondary" id="savePrefsBtn">Save preferences</button>
+        <div id="prefsSaved" class="prefs-saved" style="display: none;">Saved.</div>
       </div>
-      <div class="form-group">
-        <label>Allergies (comma-separated, e.g. nuts, dairy)</label>
-        <input type="text" id="allergies" placeholder="none">
-      </div>
-      <button type="button" class="secondary" id="savePrefsBtn">Save preferences</button>
-      <div id="prefsSaved" class="prefs-saved" style="display: none;">Saved.</div>
     </div>
 
     <!-- Plan result -->
     <div id="planResult" class="card">
+      <p id="planBadge" class="plan-badge" style="display: none;"></p>
+      <p id="planMeta" class="plan-meta" style="display: none;"></p>
       <p class="summary" id="planSummary"></p>
-      <div class="meals" id="planMeals"></div>
+      <div id="planMealsWrap">
+        <div class="meals" id="planMeals"></div>
+      </div>
+      <div id="planWeeklyWrap" style="display: none;"></div>
       <div class="grocery" id="planGrocery"></div>
     </div>
 
@@ -222,7 +395,11 @@
     const getPlanBtn = document.getElementById('getPlanBtn');
     const biometricsCard = document.getElementById('biometricsCard');
     const biometricsContent = document.getElementById('biometricsContent');
+    const biometricsActions = document.getElementById('biometricsActions');
+    const refreshBiometricsBtn = document.getElementById('refreshBiometricsBtn');
     const prefsCard = document.getElementById('prefsCard');
+    const prefsToggle = document.getElementById('prefsToggle');
+    const prefsBody = document.getElementById('prefsBody');
     const dietStyle = document.getElementById('dietStyle');
     const calorieTarget = document.getElementById('calorieTarget');
     const goalFatLoss = document.getElementById('goalFatLoss');
@@ -232,10 +409,33 @@
     const savePrefsBtn = document.getElementById('savePrefsBtn');
     const prefsSavedEl = document.getElementById('prefsSaved');
     const planResult = document.getElementById('planResult');
+    const planBadge = document.getElementById('planBadge');
+    const planMeta = document.getElementById('planMeta');
     const planSummary = document.getElementById('planSummary');
     const planMeals = document.getElementById('planMeals');
+    const planMealsWrap = document.getElementById('planMealsWrap');
+    const planWeeklyWrap = document.getElementById('planWeeklyWrap');
     const planGrocery = document.getElementById('planGrocery');
     const messageEl = document.getElementById('message');
+    const modeDaily = document.getElementById('modeDaily');
+    const modeWeekly = document.getElementById('modeWeekly');
+    const weeklyDaysWrap = document.getElementById('weeklyDaysWrap');
+    const weeklyDays = document.getElementById('weeklyDays');
+
+    let planMode = 'daily';
+
+    function setPlanMode(mode) {
+      planMode = mode;
+      const isWeekly = mode === 'weekly';
+      weeklyDaysWrap.style.display = isWeekly ? 'block' : 'none';
+      modeDaily.classList.toggle('active', !isWeekly);
+      modeWeekly.classList.toggle('active', isWeekly);
+      modeDaily.setAttribute('aria-selected', !isWeekly);
+      modeWeekly.setAttribute('aria-selected', isWeekly);
+      getPlanBtn.textContent = isWeekly ? 'Get weekly plan' : "Get today's plan";
+    }
+    modeDaily.addEventListener('click', () => setPlanMode('daily'));
+    modeWeekly.addEventListener('click', () => setPlanMode('weekly'));
 
     function showMessage(text, type) {
       messageEl.textContent = text;
@@ -246,11 +446,16 @@
       messageEl.style.display = 'none';
     }
 
+    function formatGeneratedAt() {
+      const now = new Date();
+      return now.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+    }
+
     async function checkConnection() {
       statusEl.classList.add('loading');
       statusEl.classList.remove('connected', 'error');
       try {
-        const r = await fetch('/biometrics/oura');
+        const r = await fetch('/biometrics/oura', { credentials: 'include' });
         if (r.ok) {
           statusEl.textContent = 'Oura connected.';
           statusEl.classList.remove('loading');
@@ -262,8 +467,9 @@
           loadBiometrics();
           loadPreferences();
         } else {
-          const err = await r.json().catch(() => ({}));
-          statusEl.textContent = 'Connect your Oura account to get personalized meal plans.';
+          statusEl.textContent = (r.status === 401)
+            ? 'Session expired or not connected. Connect Oura to continue.'
+            : 'Connect your Oura account to get personalized meal plans.';
           statusEl.classList.remove('loading');
           connectBtn.style.display = 'inline-block';
           actionsEl.style.display = 'none';
@@ -282,9 +488,10 @@
 
     async function loadBiometrics() {
       biometricsContent.innerHTML = '<span class="loading-inline">Loading…</span>';
+      biometricsActions.style.display = 'none';
       biometricsContent.classList.remove('error');
       try {
-        const r = await fetch('/biometrics/oura');
+        const r = await fetch('/biometrics/oura', { credentials: 'include' });
         const data = await r.json();
         if (r.ok) {
           biometricsContent.innerHTML = `
@@ -296,6 +503,7 @@
               <div class="biometric-item"><span class="label">Steps (yesterday)</span><div class="value">${data.steps_yesterday?.toLocaleString() ?? '—'}</div></div>
             </div>
           `;
+          biometricsActions.style.display = 'block';
         } else {
           biometricsContent.textContent = 'Could not load biometrics. ' + (data.detail || r.statusText);
           biometricsContent.classList.add('error');
@@ -306,9 +514,24 @@
       }
     }
 
+    refreshBiometricsBtn.addEventListener('click', () => {
+      refreshBiometricsBtn.disabled = true;
+      refreshBiometricsBtn.textContent = 'Refreshing…';
+      loadBiometrics().finally(() => {
+        refreshBiometricsBtn.disabled = false;
+        refreshBiometricsBtn.textContent = 'Refresh';
+      });
+    });
+
+    prefsToggle.addEventListener('click', () => {
+      const collapsed = prefsBody.classList.toggle('collapsed');
+      prefsToggle.textContent = collapsed ? 'Show' : 'Hide';
+      prefsToggle.setAttribute('aria-expanded', !collapsed);
+    });
+
     async function loadPreferences() {
       try {
-        const r = await fetch('/preferences');
+        const r = await fetch('/preferences', { credentials: 'include' });
         const data = await r.json();
         if (r.ok) {
           dietStyle.value = data.diet_style || 'balanced';
@@ -332,6 +555,7 @@
       try {
         const r = await fetch('/preferences', {
           method: 'PUT',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             goals,
@@ -341,8 +565,8 @@
           }),
         });
         if (r.ok) {
-          prefsSavedEl.style.display = 'block';
-          setTimeout(() => { prefsSavedEl.style.display = 'none'; }, 2000);
+          prefsSavedEl.style.display = 'flex';
+          setTimeout(() => { prefsSavedEl.style.display = 'none'; }, 2500);
         } else {
           const data = await r.json().catch(() => ({}));
           showMessage(data.detail || 'Failed to save preferences.', 'error');
@@ -353,6 +577,11 @@
     });
 
     function renderPlan(data) {
+      planBadge.style.display = 'none';
+      planWeeklyWrap.style.display = 'none';
+      planMealsWrap.style.display = 'block';
+      planMeta.textContent = 'Generated at ' + formatGeneratedAt();
+      planMeta.style.display = 'block';
       planSummary.textContent = data.summary || '';
       planMeals.innerHTML = '<h3>Meals</h3>';
       (data.meals || []).forEach(m => {
@@ -373,22 +602,72 @@
         ul.appendChild(li);
       });
       planResult.classList.add('visible');
+      planResult.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function renderWeeklyPlan(data) {
+      planBadge.textContent = data.days?.length ? data.days.length + '-day batch plan' : 'Weekly plan';
+      planBadge.style.display = 'block';
+      planMealsWrap.style.display = 'none';
+      planWeeklyWrap.style.display = 'block';
+      planMeta.textContent = 'Generated at ' + formatGeneratedAt();
+      planMeta.style.display = 'block';
+      planSummary.textContent = data.summary || '';
+      planWeeklyWrap.innerHTML = '';
+      (data.days || []).forEach(dayObj => {
+        const dayBlock = document.createElement('div');
+        dayBlock.className = 'day-block';
+        let mealsHtml = '';
+        (dayObj.meals || []).forEach(m => {
+          mealsHtml +=
+            '<div class="meal">' +
+            '<span class="meal-type">' + (m.type || '') + '</span><br>' +
+            '<span class="meal-name">' + (m.name || '') + '</span>' +
+            (m.calories ? '<span class="meal-cal"> · ' + m.calories + ' kcal</span>' : '') +
+            (m.description ? '<p class="meal-desc">' + m.description + '</p>' : '') +
+            '</div>';
+        });
+        dayBlock.innerHTML = '<h4>' + (dayObj.day || '') + '</h4>' + mealsHtml;
+        planWeeklyWrap.appendChild(dayBlock);
+      });
+      planGrocery.innerHTML = '<h3>Grocery list (weekly)</h3>';
+      const list = document.createElement('div');
+      (data.grocery_list || []).forEach(g => {
+        const item = document.createElement('div');
+        item.className = 'grocery-item-weekly';
+        item.innerHTML =
+          '<span>' + (g.quantity ? g.quantity + ' – ' : '') + (g.item || '') + '</span>' +
+          (g.prep_notes ? '<div class="prep">' + g.prep_notes + '</div>' : '');
+        list.appendChild(item);
+      });
+      planGrocery.appendChild(list);
+      planResult.classList.add('visible');
+      planResult.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
     getPlanBtn.addEventListener('click', async () => {
       hideMessage();
       getPlanBtn.disabled = true;
-      getPlanBtn.textContent = 'Generating…';
+      const isWeekly = planMode === 'weekly';
+      const days = parseInt(weeklyDays.value, 10) || 7;
+      getPlanBtn.innerHTML = '<span class="spinner"></span> ' + (isWeekly ? 'Generating weekly plan…' : 'Generating…');
+      const url = '/generate-meal-plan/from-oura' + (isWeekly ? '?weekly_prep=true&weekly_days=' + days : '');
       try {
-        const r = await fetch('/generate-meal-plan/from-oura', {
+        const r = await fetch(url, {
           method: 'POST',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({}),
         });
         const data = await r.json();
         if (r.ok) {
-          renderPlan(data);
-          showMessage('Plan ready.', 'success');
+          if (data.days) {
+            renderWeeklyPlan(data);
+            showMessage(days + '-day plan ready.', 'success');
+          } else {
+            renderPlan(data);
+            showMessage('Plan ready.', 'success');
+          }
         } else {
           let msg = 'Failed to generate plan.';
           if (typeof data.detail === 'string') msg = data.detail;
@@ -400,7 +679,7 @@
         showMessage('Request failed. Check your connection and try again.', 'error');
       } finally {
         getPlanBtn.disabled = false;
-        getPlanBtn.textContent = "Get today's plan";
+        getPlanBtn.textContent = isWeekly ? 'Get weekly plan' : "Get today's plan";
       }
     });
 

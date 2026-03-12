@@ -4,29 +4,94 @@ Hyper-personalized daily meal architect powered by your biometrics.
 Turns Oura/Apple Watch data into zero-decision meal plans + grocery lists.
 """
 
+import logging
+import os
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Union
 
-from fastapi import FastAPI, Body, Query, HTTPException
+from fastapi import FastAPI, Body, Query, HTTPException, Request
 from fastapi.responses import RedirectResponse, FileResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 from dotenv import load_dotenv
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
 
+from app.auth import create_session_token, get_current_user_id, CurrentUserId
 from app.models.biometrics import (
     BiometricData,
     MealPlanFromOuraOverrides,
     MealPlanResponse,
+    WeeklyMealPlanResponse,
 )
-from app.services.meal_generator import generate_meal_plan as generate_meal_plan_service
+from app.services.meal_generator import (
+    generate_meal_plan as generate_meal_plan_service,
+    generate_weekly_meal_plan,
+)
 from app.services.oura_oauth import (
     exchange_code_for_tokens,
     generate_state,
     get_authorize_url,
     get_valid_access_token,
+    verify_state,
 )
-from app.services.oura_client import fetch_oura_biometrics
-from app.db import DEFAULT_USER_ID, init_db, get_user_preferences, set_user_preferences
+from app.services.oura_client import fetch_oura_biometrics, fetch_oura_personal_info
+from app.db import (
+    init_db,
+    get_user_preferences,
+    set_user_preferences,
+    get_or_create_user_by_email,
+    set_oura_tokens,
+    save_plan,
+    get_plans,
+    get_plan_by_id,
+)
 
 # Load environment variables early (even if .env is empty for now)
 load_dotenv()
+
+# Structured logging: timestamp (UTC), level, logger name, message
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+log = logging.getLogger(__name__)
+
+# Optional Sentry monitoring (enabled only if SENTRY_DSN is set)
+_sentry_dsn = (os.getenv("SENTRY_DSN") or "").strip()
+if _sentry_dsn:
+    sentry_sdk.init(
+        dsn=_sentry_dsn,
+        integrations=[FastApiIntegration()],
+        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.0")),
+        profiles_sample_rate=float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.0")),
+        environment=os.getenv("SENTRY_ENVIRONMENT") or None,
+    )
+    log.info("Sentry monitoring enabled")
+else:
+    log.info("Sentry monitoring not configured (SENTRY_DSN not set)")
+
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    """Assign request_id and log request start/end."""
+
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get("x-request-id") or str(uuid.uuid4())[:8]
+        request.state.request_id = request_id
+        log.info("request_started method=%s path=%s request_id=%s", request.method, request.scope.get("path"), request_id)
+        response = await call_next(request)
+        log.info("request_finished method=%s path=%s request_id=%s status=%s", request.method, request.scope.get("path"), request_id, response.status_code)
+        return response
+
+
+limiter = Limiter(key_func=get_remote_address)
+
 
 app = FastAPI(
     title="PulsePlate",
@@ -39,11 +104,17 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(RequestLoggingMiddleware)
+
 
 @app.on_event("startup")
 async def startup() -> None:
     """Ensure SQLite DB and tables exist."""
     init_db()
+    log.info("PulsePlate startup complete")
 
 
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -64,8 +135,21 @@ async def root():
 
 @app.get("/health")
 async def health():
-    """Health check for monitoring / load balancers."""
+    """Health check for monitoring / load balancers. Always returns 200 if the app is up."""
     return {"status": "alive", "message": "PulsePlate"}
+
+
+@app.get("/health/ready")
+async def health_ready():
+    """
+    Readiness check: returns 200 if the app can generate meal plans (GROK_API_KEY set), 503 otherwise.
+    Use for deployment / load balancers to avoid routing to instances that cannot serve plan requests.
+    """
+    api_key = (os.getenv("GROK_API_KEY") or "").strip()
+    if not api_key:
+        log.warning("health_ready failed: GROK_API_KEY not set")
+        raise HTTPException(status_code=503, detail="GROK_API_KEY not configured")
+    return {"status": "ready", "message": "PulsePlate ready to generate meal plans"}
 
 
 # --- Oura OAuth ---
@@ -73,73 +157,117 @@ async def health():
 @app.get("/auth/oura/authorize")
 async def oura_authorize():
     """
-    Redirect to Oura to authorize the app. After approval, user is sent to /auth/oura/callback.
+    Redirect to Oura to authorize the app. State is stored in a cookie and validated on callback (CSRF protection).
+    If SECRET_KEY is set, state is signed and expiry-checked.
     """
     state = generate_state()
     url = get_authorize_url(state=state)
     response = RedirectResponse(url=url, status_code=302)
-    # Store state in cookie for callback verification (optional; for production use signed state)
-    response.set_cookie(key="oura_state", value=state, httponly=True, max_age=600)
+    response.set_cookie(
+        key="oura_state",
+        value=state,
+        httponly=True,
+        max_age=600,
+        samesite="lax",
+    )
     return response
 
 
 @app.get("/auth/oura/callback")
 async def oura_callback(
+    request: Request,
     code: str | None = Query(None, description="Authorization code from Oura"),
-    state: str | None = Query(None),
+    state: str | None = Query(None, description="State echoed back by Oura; must match cookie"),
     error: str | None = Query(None, description="e.g. access_denied if user declined"),
 ):
     """
-    Oura redirects here after user authorizes. Exchanges code for tokens and stores them.
-    Redirects to / with success or error.
+    Oura redirects here after user authorizes. Validates state (CSRF), exchanges code for tokens,
+    fetches Oura email to resolve/create user, stores tokens for that user, issues JWT session cookie.
     """
     if error:
         return RedirectResponse(url="/?oura_error=" + error, status_code=302)
     if not code:
         return RedirectResponse(url="/?oura_error=missing_code", status_code=302)
+    stored_state = request.cookies.get("oura_state")
+    if not verify_state(state, stored_state):
+        return RedirectResponse(url="/?oura_error=invalid_state", status_code=302)
     try:
-        await exchange_code_for_tokens(code=code)
+        tokens = await exchange_code_for_tokens(code=code, store=False)
     except HTTPException:
         raise
     except Exception:
         return RedirectResponse(url="/?oura_error=token_exchange_failed", status_code=302)
-    return RedirectResponse(url="/?oura=connected", status_code=302)
+    access_token = tokens["access_token"]
+    try:
+        info = await fetch_oura_personal_info(access_token)
+    except HTTPException:
+        return RedirectResponse(url="/?oura_error=personal_info_failed", status_code=302)
+    email = (info.get("email") or info.get("id") or "unknown")
+    if not isinstance(email, str):
+        email = str(email)
+    try:
+        user_id = get_or_create_user_by_email(email)
+    except ValueError:
+        return RedirectResponse(url="/?oura_error=invalid_email", status_code=302)
+    set_oura_tokens(
+        user_id,
+        access_token,
+        tokens.get("refresh_token"),
+        tokens.get("expires_at", 0),
+    )
+    jwt_token = create_session_token(user_id)
+    response = RedirectResponse(url="/?oura=connected", status_code=302)
+    response.delete_cookie(key="oura_state")
+    response.set_cookie(
+        key="session",
+        value=jwt_token,
+        httponly=True,
+        max_age=60 * 60 * 24 * 7,  # 7 days
+        samesite="lax",
+    )
+    return response
 
 
 @app.get("/preferences")
-async def get_preferences():
-    """Return saved user preferences (goals, diet_style, calorie_target, allergies)."""
-    return get_user_preferences()
+async def get_preferences(user_id: CurrentUserId):
+    """Return saved user preferences (goals, diet_style, calorie_target, allergies). Requires auth."""
+    return get_user_preferences(user_id)
 
 
 @app.put("/preferences")
 async def update_preferences(
+    user_id: CurrentUserId,
     overrides: MealPlanFromOuraOverrides = Body(..., description="Goals, diet_style, calorie_target, allergies to save"),
 ):
-    """Save user preferences. Used as defaults when generating meal plan from Oura."""
+    """Save user preferences. Used as defaults when generating meal plan from Oura. Requires auth."""
     set_user_preferences(
-        DEFAULT_USER_ID,
+        user_id,
         goals=overrides.goals,
         diet_style=overrides.diet_style,
         calorie_target=overrides.calorie_target,
         allergies=overrides.allergies,
     )
-    return get_user_preferences()
+    return get_user_preferences(user_id)
 
 
 @app.get("/biometrics/oura", response_model=BiometricData)
-async def get_oura_biometrics():
+async def get_oura_biometrics(user_id: CurrentUserId):
     """
     Fetch current biometrics from Oura (sleep, readiness, activity, HR, HRV).
-    Requires having connected Oura via /auth/oura/authorize first.
-    Returns BiometricData with Oura-derived fields; goals/diet/calories/allergies use defaults (override in UI or merge when calling /generate-meal-plan).
+    Requires auth (session after Oura connect).
     """
-    access_token = await get_valid_access_token()
+    access_token = await get_valid_access_token(user_id)
     return await fetch_oura_biometrics(access_token)
 
 
-@app.post("/generate-meal-plan", response_model=MealPlanResponse)
+@app.post(
+    "/generate-meal-plan",
+    response_model=Union[MealPlanResponse, WeeklyMealPlanResponse],
+    summary="Generate meal plan (daily or weekly)",
+)
+@limiter.limit("5/minute")
 async def generate_meal_plan(
+    request: Request,
     biometrics: BiometricData = Body(
         ...,
         description="Current biometric data + user preferences",
@@ -156,27 +284,58 @@ async def generate_meal_plan(
                 "allergies": ["nuts"],
             }
         ],
-    )
+    ),
+    weekly_prep: bool = Query(
+        False,
+        description="If true, generate a 5–7 day batch meal plan instead of a single day.",
+    ),
+    weekly_days: int = Query(
+        7,
+        ge=5,
+        le=7,
+        description="Number of days for weekly plan (5–7). Used only when weekly_prep=true.",
+    ),
 ):
     """
-    Generate a same-day meal plan + grocery list from biometrics via Grok API.
+    Generate a meal plan + grocery list from biometrics.
+
+    - **Daily mode** (`weekly_prep=false`, default): Same-day plan via Grok API.
+    - **Weekly mode** (`weekly_prep=true`): 5–7 day batch/meal-prep plan; batch-friendly recipes, consolidated grocery list with prep notes. Currently uses mock data; Grok integration planned.
     """
+    if weekly_prep:
+        return await generate_weekly_meal_plan(biometrics, days=weekly_days)
     return await generate_meal_plan_service(biometrics)
 
 
-@app.post("/generate-meal-plan/from-oura", response_model=MealPlanResponse)
+@app.post(
+    "/generate-meal-plan/from-oura",
+    response_model=Union[MealPlanResponse, WeeklyMealPlanResponse],
+    summary="Generate meal plan from Oura (daily or weekly)",
+)
+@limiter.limit("5/minute")
 async def generate_meal_plan_from_oura(
+    request: Request,
+    user_id: CurrentUserId,
     overrides: MealPlanFromOuraOverrides | None = Body(
         None,
         description="Optional goals, diet, calories, allergies; biometrics come from Oura. Send {} or omit for defaults.",
     ),
+    weekly_prep: bool = Query(
+        False,
+        description="If true, generate a 5–7 day batch meal plan instead of a single day.",
+    ),
+    weekly_days: int = Query(
+        7,
+        ge=5,
+        le=7,
+        description="Number of days for weekly plan (5–7). Used only when weekly_prep=true.",
+    ),
 ):
     """
-    Fetch current biometrics from Oura, merge with your preferences, and generate today's meal plan + grocery list.
-    Requires Oura connected via /auth/oura/authorize. Uses saved preferences from DB when overrides are omitted.
+    Fetch current biometrics from Oura, merge with your preferences, and generate a meal plan + grocery list.
+    Requires auth. Saves the generated plan to history.
     """
-    saved = get_user_preferences()
-    # Use saved prefs when no body or empty body (defaults)
+    saved = get_user_preferences(user_id)
     use_saved = overrides is None or (
         (overrides.goals == [] and overrides.diet_style == "balanced"
          and overrides.calorie_target == 2000 and overrides.allergies is None)
@@ -190,7 +349,7 @@ async def generate_meal_plan_from_oura(
         )
     else:
         o = overrides or MealPlanFromOuraOverrides()
-    access_token = await get_valid_access_token()
+    access_token = await get_valid_access_token(user_id)
     biometrics = await fetch_oura_biometrics(access_token)
     merged = biometrics.model_copy(
         update={
@@ -200,7 +359,42 @@ async def generate_meal_plan_from_oura(
             "allergies": o.allergies if o.allergies is not None else biometrics.allergies,
         }
     )
-    return await generate_meal_plan_service(merged)
+    if weekly_prep:
+        result = await generate_weekly_meal_plan(merged, days=weekly_days)
+    else:
+        result = await generate_meal_plan_service(merged)
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    save_plan(
+        user_id=user_id,
+        generated_at=generated_at,
+        biometric_snapshot=merged.model_dump_json(),
+        plan_json=result.model_dump_json(),
+        weekly_days=weekly_days if weekly_prep else None,
+        is_weekly=weekly_prep,
+    )
+    return result
+
+
+@app.get("/plans")
+async def list_plans(
+    user_id: CurrentUserId,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    """Return paginated plan history for the current user (newest first). Requires auth."""
+    return get_plans(user_id, limit=limit, offset=offset)
+
+
+@app.get("/plans/{plan_id}")
+async def get_plan(
+    plan_id: int,
+    user_id: CurrentUserId,
+):
+    """Return a single saved plan by id if it belongs to the current user. Requires auth."""
+    plan = get_plan_by_id(plan_id, user_id)
+    if not plan:
+        raise HTTPException(status_code=404, detail="Plan not found")
+    return plan
 
 if __name__ == "__main__":
     # For quick local runs: python app/main.py

@@ -1,4 +1,4 @@
-"""SQLite persistence for Oura tokens and user preferences."""
+"""SQLite persistence for Oura tokens, user preferences, and plan history."""
 
 import json
 import os
@@ -21,11 +21,13 @@ def _get_conn() -> sqlite3.Connection:
 
 
 def init_db() -> None:
-    """Create users table if it does not exist. Safe to call on every startup."""
+    """Create users and plans tables if they do not exist. Migrate users with new columns. Safe to call on every startup."""
     with _get_conn() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY,
+                email TEXT UNIQUE,
+                oura_user_id TEXT,
                 oura_access_token TEXT,
                 oura_refresh_token TEXT,
                 oura_expires_at INTEGER,
@@ -37,6 +39,26 @@ def init_db() -> None:
                 updated_at TEXT NOT NULL
             )
         """)
+        # Migration: add email/oura_user_id if table already existed without them
+        for col in ("email", "oura_user_id"):
+            try:
+                conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
+            except sqlite3.OperationalError:
+                pass  # column already exists
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS plans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                generated_at TEXT NOT NULL,
+                biometric_snapshot TEXT,
+                plan_json TEXT NOT NULL,
+                weekly_days INTEGER,
+                is_weekly INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_plans_user_id ON plans(user_id)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_plans_generated_at ON plans(generated_at)")
         conn.commit()
 
 
@@ -54,6 +76,40 @@ def get_oura_tokens(user_id: int = DEFAULT_USER_ID) -> dict[str, Any] | None:
         "refresh_token": row[1],
         "expires_at": row[2],
     }
+
+
+def get_or_create_user_by_email(email: str) -> int:
+    """
+    Return user id for the given email. If a user with this email exists, return their id.
+    If the legacy single user (id=1) has no email set, assign this email to them and return 1.
+    Otherwise create a new user and return the new id.
+    """
+    if not (email or "").strip():
+        raise ValueError("email is required")
+    email = email.strip()
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    with _get_conn() as conn:
+        row = conn.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
+        if row:
+            return row[0]
+        legacy = conn.execute(
+            "SELECT id FROM users WHERE id = 1 AND (email IS NULL OR email = '')"
+        ).fetchone()
+        if legacy:
+            conn.execute(
+                "UPDATE users SET email = ?, updated_at = ? WHERE id = 1",
+                (email, now),
+            )
+            conn.commit()
+            return 1
+        max_row = conn.execute("SELECT MAX(id) FROM users").fetchone()
+        next_id = (max_row[0] or 0) + 1
+        conn.execute(
+            "INSERT INTO users (id, email, created_at, updated_at) VALUES (?, ?, ?, ?)",
+            (next_id, email, now, now),
+        )
+        conn.commit()
+        return next_id
 
 
 def set_oura_tokens(
@@ -142,3 +198,71 @@ def set_user_preferences(
             ),
         )
         conn.commit()
+
+
+def save_plan(
+    user_id: int,
+    generated_at: str,
+    biometric_snapshot: str | None,
+    plan_json: str,
+    weekly_days: int | None = None,
+    is_weekly: bool = False,
+) -> int:
+    """Save a generated plan to history. Returns the new plan id."""
+    with _get_conn() as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO plans (user_id, generated_at, biometric_snapshot, plan_json, weekly_days, is_weekly)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (user_id, generated_at, biometric_snapshot, plan_json, weekly_days, 1 if is_weekly else 0),
+        )
+        conn.commit()
+        return cur.lastrowid
+
+
+def get_plans(
+    user_id: int,
+    limit: int = 20,
+    offset: int = 0,
+) -> list[dict[str, Any]]:
+    """Return paginated plan history for the user (newest first)."""
+    with _get_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, user_id, generated_at, plan_json, weekly_days, is_weekly
+            FROM plans WHERE user_id = ? ORDER BY generated_at DESC LIMIT ? OFFSET ?
+            """,
+            (user_id, limit, offset),
+        ).fetchall()
+    return [
+        {
+            "id": r[0],
+            "user_id": r[1],
+            "generated_at": r[2],
+            "plan_json": r[3],
+            "weekly_days": r[4],
+            "is_weekly": bool(r[5]),
+        }
+        for r in rows
+    ]
+
+
+def get_plan_by_id(plan_id: int, user_id: int) -> dict[str, Any] | None:
+    """Return a single plan by id if it belongs to the user."""
+    with _get_conn() as conn:
+        row = conn.execute(
+            "SELECT id, user_id, generated_at, biometric_snapshot, plan_json, weekly_days, is_weekly FROM plans WHERE id = ? AND user_id = ?",
+            (plan_id, user_id),
+        ).fetchone()
+    if not row:
+        return None
+    return {
+        "id": row[0],
+        "user_id": row[1],
+        "generated_at": row[2],
+        "biometric_snapshot": row[3],
+        "plan_json": row[4],
+        "weekly_days": row[5],
+        "is_weekly": bool(row[6]),
+    }

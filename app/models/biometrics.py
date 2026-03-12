@@ -34,8 +34,33 @@ class MealPlanFromOuraOverrides(BaseModel):
 
 
 class MealPlanResponse(BaseModel):
-    """Structured output: meal plan + grocery list."""
+    """Structured output: single-day meal plan + grocery list."""
 
     summary: str = Field(..., description="One-sentence overview of today's plan rationale")
     meals: List[dict] = Field(..., description="List of 3 meals + snacks")
     grocery_list: List[dict] = Field(..., description="Items with quantities")
+
+
+class DayPlan(BaseModel):
+    """One day in a weekly meal plan."""
+
+    day: str = Field(..., description="Day label, e.g. Monday")
+    meals: List[dict] = Field(..., description="Meals for this day (type, name, description, calories)")
+
+
+class GroceryItemWeekly(BaseModel):
+    """Grocery item for weekly plan: scaled quantity + optional batch/prep notes."""
+
+    item: str = Field(..., description="Ingredient name")
+    quantity: str = Field(..., description="Quantity for the week, e.g. 2kg, 1.5L")
+    prep_notes: Optional[str] = Field(default=None, description="e.g. Batch cook Sunday")
+
+
+class WeeklyMealPlanResponse(BaseModel):
+    """Structured output: 5–7 day batch meal plan + consolidated grocery list."""
+
+    summary: str = Field(..., description="Weekly overview and batch-prep rationale")
+    days: List[DayPlan] = Field(..., description="One entry per day (5–7 days)")
+    grocery_list: List[GroceryItemWeekly] = Field(
+        ..., description="Consolidated weekly list with scaled quantities and prep notes"
+    )
