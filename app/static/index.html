@@ -293,6 +293,86 @@
       color: var(--muted);
     }
     .grocery-item-weekly .prep { font-size: 0.8rem; color: var(--accent); margin-top: 0.15rem; }
+    .history-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .history-list {
+      margin: 0.25rem 0 0 0;
+      padding: 0;
+      list-style: none;
+      font-size: 0.85rem;
+      color: var(--muted);
+      max-height: 220px;
+      overflow-y: auto;
+    }
+    .history-empty {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-top: 0.25rem;
+    }
+    .history-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.4rem 0;
+      border-bottom: 1px solid rgba(45,58,77,0.6);
+      cursor: pointer;
+    }
+    .history-item:last-child { border-bottom: none; }
+    .history-main {
+      display: flex;
+      flex-direction: column;
+      gap: 0.1rem;
+    }
+    .history-title {
+      font-size: 0.86rem;
+      color: var(--text);
+    }
+    .history-meta {
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
+    .history-pill {
+      font-size: 0.7rem;
+      padding: 0.12rem 0.45rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+    @media (max-width: 600px) {
+      .container {
+        padding: 1.5rem 1.1rem 2.5rem;
+      }
+      h1 {
+        font-size: 1.4rem;
+      }
+      .card {
+        padding: 1rem 1.1rem;
+        border-radius: 12px;
+      }
+      .plan-actions {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      button.primary {
+        width: 100%;
+        justify-content: center;
+      }
+      .mode-tabs {
+        width: 100%;
+        justify-content: space-between;
+      }
+      .mode-tabs button {
+        flex: 1;
+        text-align: center;
+      }
+    }
   </style>
 </head>
 <body>
@@ -373,6 +453,18 @@
       </div>
     </div>
 
+    <!-- Recent plans -->
+    <div id="historyCard" class="card" style="display: none;">
+      <div class="history-card-header">
+        <h2 style="margin-bottom: 0;">Recent plans</h2>
+        <span style="font-size: 0.78rem; color: var(--muted);" id="historyHint">Tap to reopen</span>
+      </div>
+      <div id="historyBody">
+        <p class="history-empty" id="historyEmpty">No plans yet. Generate your first plan above.</p>
+        <ul id="historyList" class="history-list"></ul>
+      </div>
+    </div>
+
     <!-- Plan result -->
     <div id="planResult" class="card">
       <p id="planBadge" class="plan-badge" style="display: none;"></p>
@@ -421,6 +513,9 @@
     const modeWeekly = document.getElementById('modeWeekly');
     const weeklyDaysWrap = document.getElementById('weeklyDaysWrap');
     const weeklyDays = document.getElementById('weeklyDays');
+    const historyCard = document.getElementById('historyCard');
+    const historyList = document.getElementById('historyList');
+    const historyEmpty = document.getElementById('historyEmpty');
 
     let planMode = 'daily';
 
@@ -464,8 +559,10 @@
           actionsEl.style.display = 'block';
           biometricsCard.style.display = 'block';
           prefsCard.style.display = 'block';
+          historyCard.style.display = 'block';
           loadBiometrics();
           loadPreferences();
+          loadHistory();
         } else {
           statusEl.textContent = (r.status === 401)
             ? 'Session expired or not connected. Connect Oura to continue.'
@@ -475,6 +572,7 @@
           actionsEl.style.display = 'none';
           biometricsCard.style.display = 'none';
           prefsCard.style.display = 'none';
+          historyCard.style.display = 'none';
         }
       } catch (_) {
         statusEl.textContent = 'Connect your Oura account to get personalized meal plans.';
@@ -543,6 +641,84 @@
           allergiesInput.value = Array.isArray(data.allergies) ? data.allergies.join(', ') : (data.allergies || '');
         }
       } catch (_) {}
+    }
+
+    async function loadHistory() {
+      try {
+        const r = await fetch('/plans?limit=10', { credentials: 'include' });
+        if (!r.ok) {
+          historyEmpty.textContent = 'No history yet.';
+          historyList.innerHTML = '';
+          return;
+        }
+        const items = await r.json();
+        historyList.innerHTML = '';
+        if (!items.length) {
+          historyEmpty.style.display = 'block';
+          return;
+        }
+        historyEmpty.style.display = 'none';
+        items.forEach(item => {
+          const li = document.createElement('li');
+          li.className = 'history-item';
+          const main = document.createElement('div');
+          main.className = 'history-main';
+          const title = document.createElement('div');
+          title.className = 'history-title';
+          const isWeekly = !!item.is_weekly;
+          const label = isWeekly ? (item.weekly_days || 7) + '-day plan' : 'Daily plan';
+          title.textContent = label;
+          const meta = document.createElement('div');
+          meta.className = 'history-meta';
+          const ts = item.generated_at || '';
+          try {
+            const d = new Date(ts);
+            meta.textContent = d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+          } catch {
+            meta.textContent = ts;
+          }
+          main.appendChild(title);
+          main.appendChild(meta);
+          const pill = document.createElement('span');
+          pill.className = 'history-pill';
+          pill.textContent = isWeekly ? 'Weekly' : 'Today';
+          li.appendChild(main);
+          li.appendChild(pill);
+          li.addEventListener('click', () => reopenPlan(item.id, isWeekly));
+          historyList.appendChild(li);
+        });
+      } catch (_) {
+        historyEmpty.textContent = 'Could not load history.';
+        historyList.innerHTML = '';
+      }
+    }
+
+    async function reopenPlan(id, isWeekly) {
+      hideMessage();
+      if (!id) return;
+      try {
+        const r = await fetch(`/plans/${id}`, { credentials: 'include' });
+        if (!r.ok) {
+          showMessage('Could not load saved plan.', 'error');
+          return;
+        }
+        const data = await r.json();
+        let plan;
+        try {
+          plan = JSON.parse(data.plan_json);
+        } catch {
+          plan = data.plan_json;
+        }
+        if (plan && plan.days) {
+          renderWeeklyPlan(plan);
+          showMessage('Reopened weekly plan from history.', 'success');
+        } else if (plan) {
+          renderPlan(plan);
+          showMessage('Reopened plan from history.', 'success');
+        }
+      } catch (_) {
+        showMessage('Failed to reopen plan. Try again.', 'error');
+      }
     }
 
     savePrefsBtn.addEventListener('click', async () => {
@@ -668,6 +844,7 @@
             renderPlan(data);
             showMessage('Plan ready.', 'success');
           }
+          loadHistory();
         } else {
           let msg = 'Failed to generate plan.';
           if (typeof data.detail === 'string') msg = data.detail;
