@@ -299,6 +299,7 @@
       color: var(--muted);
     }
     .grocery-item-weekly .prep { font-size: 0.8rem; color: var(--accent); margin-top: 0.15rem; }
+    .grocery-actions { margin-top: 0.75rem; }
     .history-card-header {
       display: flex;
       align-items: center;
@@ -481,6 +482,9 @@
       </div>
       <div id="planWeeklyWrap" style="display: none;"></div>
       <div class="grocery" id="planGrocery"></div>
+      <div id="copyGroceryWrap" class="grocery-actions" style="display: none;">
+        <button type="button" class="secondary" id="copyGroceryBtn">Copy grocery list</button>
+      </div>
     </div>
 
     <div id="message"></div>
@@ -522,8 +526,11 @@
     const historyCard = document.getElementById('historyCard');
     const historyList = document.getElementById('historyList');
     const historyEmpty = document.getElementById('historyEmpty');
+    const copyGroceryWrap = document.getElementById('copyGroceryWrap');
+    const copyGroceryBtn = document.getElementById('copyGroceryBtn');
 
     let planMode = 'daily';
+    let lastGroceryList = [];
 
     function setPlanMode(mode) {
       planMode = mode;
@@ -776,13 +783,15 @@
           (m.description ? '<p class="meal-desc">' + m.description + '</p>' : '');
         planMeals.appendChild(div);
       });
+      lastGroceryList = data.grocery_list || [];
       planGrocery.innerHTML = '<h3>Grocery list</h3><ul></ul>';
       const ul = planGrocery.querySelector('ul');
-      (data.grocery_list || []).forEach(g => {
+      lastGroceryList.forEach(g => {
         const li = document.createElement('li');
         li.textContent = (g.quantity ? g.quantity + ' – ' : '') + (g.item || '');
         ul.appendChild(li);
       });
+      copyGroceryWrap.style.display = lastGroceryList.length ? 'block' : 'none';
       planResult.classList.add('visible');
       planResult.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
@@ -812,9 +821,10 @@
         dayBlock.innerHTML = '<h4>' + (dayObj.day || '') + '</h4>' + mealsHtml;
         planWeeklyWrap.appendChild(dayBlock);
       });
+      lastGroceryList = data.grocery_list || [];
       planGrocery.innerHTML = '<h3>Grocery list (weekly)</h3>';
       const list = document.createElement('div');
-      (data.grocery_list || []).forEach(g => {
+      lastGroceryList.forEach(g => {
         const item = document.createElement('div');
         item.className = 'grocery-item-weekly';
         item.innerHTML =
@@ -823,9 +833,31 @@
         list.appendChild(item);
       });
       planGrocery.appendChild(list);
+      copyGroceryWrap.style.display = lastGroceryList.length ? 'block' : 'none';
       planResult.classList.add('visible');
       planResult.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
+
+    function buildGroceryListText() {
+      return lastGroceryList.map(g => {
+        let line = (g.quantity ? g.quantity + ' – ' : '') + (g.item || '');
+        if (g.prep_notes) line += ' — ' + g.prep_notes;
+        return line;
+      }).filter(Boolean).join('\n');
+    }
+
+    copyGroceryBtn.addEventListener('click', async () => {
+      const text = buildGroceryListText();
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        const label = copyGroceryBtn.textContent;
+        copyGroceryBtn.textContent = 'Copied!';
+        setTimeout(() => { copyGroceryBtn.textContent = label; }, 2000);
+      } catch (_) {
+        showMessage('Could not copy. Try selecting the list manually.', 'error');
+      }
+    });
 
     getPlanBtn.addEventListener('click', async () => {
       hideMessage();

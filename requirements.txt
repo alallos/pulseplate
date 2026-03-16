@@ -18,6 +18,9 @@ PyJWT==2.10.1
 slowapi==0.1.9
 sentry-sdk==2.54.0
 
+# Database (Postgres when DATABASE_URL set; SQLite otherwise)
+psycopg2-binary==2.9.10
+
 # Testing
 pytest==9.0.2
 
