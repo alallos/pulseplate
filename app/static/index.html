@@ -4,6 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>PulsePlate – Your pulse → perfect plate</title>
+  <meta name="theme-color" content="#0f1419">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="PulsePlate">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
   <style>
     :root {
       --bg: #0f1419;
@@ -868,6 +874,12 @@
     if (params.get('oura_error')) {
       showMessage('Oura connection failed: ' + params.get('oura_error'), 'error');
       history.replaceState({}, '', location.pathname);
+    }
+
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+      });
     }
 
     checkConnection();
