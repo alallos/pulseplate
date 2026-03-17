@@ -299,7 +299,12 @@
       color: var(--muted);
     }
     .grocery-item-weekly .prep { font-size: 0.8rem; color: var(--accent); margin-top: 0.15rem; }
-    .grocery-actions { margin-top: 0.75rem; }
+    .grocery-actions {
+      margin-top: 0.75rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
     .history-card-header {
       display: flex;
       align-items: center;
@@ -491,6 +496,7 @@
       <div class="grocery" id="planGrocery"></div>
       <div id="copyGroceryWrap" class="grocery-actions" style="display: none;">
         <button type="button" class="secondary" id="copyGroceryBtn">Copy grocery list</button>
+        <button type="button" class="secondary" id="copyFullPlanBtn">Copy full plan</button>
       </div>
     </div>
 
@@ -536,9 +542,11 @@
     const historyEmpty = document.getElementById('historyEmpty');
     const copyGroceryWrap = document.getElementById('copyGroceryWrap');
     const copyGroceryBtn = document.getElementById('copyGroceryBtn');
+    const copyFullPlanBtn = document.getElementById('copyFullPlanBtn');
 
     let planMode = 'daily';
     let lastGroceryList = [];
+    let lastPlan = null;
 
     function setPlanMode(mode) {
       planMode = mode;
@@ -776,6 +784,7 @@
     });
 
     function renderPlan(data) {
+      lastPlan = data || null;
       planBadge.style.display = 'none';
       planWeeklyWrap.style.display = 'none';
       planMealsWrap.style.display = 'block';
@@ -807,6 +816,7 @@
     }
 
     function renderWeeklyPlan(data) {
+      lastPlan = data || null;
       planBadge.textContent = data.days?.length ? data.days.length + '-day batch plan' : 'Weekly plan';
       planBadge.style.display = 'block';
       planMealsWrap.style.display = 'none';
@@ -856,6 +866,46 @@
       }).filter(Boolean).join('\n');
     }
 
+    function buildFullPlanText() {
+      if (!lastPlan) return '';
+      const isWeekly = Array.isArray(lastPlan.days);
+      const header = isWeekly
+        ? `PulsePlate – ${lastPlan.days.length || 7}-day batch plan`
+        : 'PulsePlate – Today\'s plan';
+      const lines = [];
+      lines.push(header);
+      if (lastPlan.summary) {
+        lines.push('');
+        lines.push('Summary:');
+        lines.push(lastPlan.summary);
+      }
+      const meals = isWeekly ? (lastPlan.days || []) : [{ day: null, meals: lastPlan.meals || [] }];
+      lines.push('');
+      lines.push('Meals:');
+      meals.forEach(dayBlock => {
+        if (dayBlock.day) {
+          lines.push('');
+          lines.push(dayBlock.day + ':');
+        }
+        (dayBlock.meals || []).forEach(m => {
+          const type = m.type || '';
+          const name = m.name || '';
+          const cal = m.calories ? ` – ${m.calories} kcal` : '';
+          lines.push(`${type ? type + ': ' : ''}${name}${cal}`);
+          if (m.description) {
+            lines.push('  ' + m.description);
+          }
+        });
+      });
+      const groceryText = buildGroceryListText();
+      if (groceryText) {
+        lines.push('');
+        lines.push('Grocery list:');
+        lines.push(groceryText);
+      }
+      return lines.join('\n');
+    }
+
     copyGroceryBtn.addEventListener('click', async () => {
       const text = buildGroceryListText();
       if (!text) return;
@@ -866,6 +916,19 @@
         setTimeout(() => { copyGroceryBtn.textContent = label; }, 2000);
       } catch (_) {
         showMessage('Could not copy. Try selecting the list manually.', 'error');
+      }
+    });
+
+    copyFullPlanBtn.addEventListener('click', async () => {
+      const text = buildFullPlanText();
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        const label = copyFullPlanBtn.textContent;
+        copyFullPlanBtn.textContent = 'Copied!';
+        setTimeout(() => { copyFullPlanBtn.textContent = label; }, 2000);
+      } catch (_) {
+        showMessage('Could not copy. Try selecting the plan manually.', 'error');
       }
     });
 
