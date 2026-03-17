@@ -94,14 +94,17 @@ def _build_user_prompt(data: BiometricData) -> str:
 
 
 def _build_weekly_user_prompt(data: BiometricData, days: int) -> str:
-    """Build user message for weekly batch plan."""
+    """Build user message for weekly batch plan, including optional 7-day summary."""
     day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     requested = day_names[:days]
+    weekly_summary = getattr(data, "weekly_summary", None)
+    extra = f"\n\nWeekly summary over last 7 days:\n{weekly_summary}" if weekly_summary else ""
     return (
         f"Generate a {days}-day weekly batch meal plan. Days to include: {', '.join(requested)}. "
         "Return ONLY the JSON object, no other text.\n\n"
         "Biometrics and preferences:\n"
         f"{data.model_dump_json(indent=2)}"
+        f"{extra}"
     )
 
 

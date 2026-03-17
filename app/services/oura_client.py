@@ -111,7 +111,7 @@ async def fetch_oura_biometrics(access_token: str) -> BiometricData:
     activity = check(activity_r, "daily_activity")
     sleep_detail = check(sleep_detail_r, "sleep")
 
-    # Most recent readiness -> recovery
+    # Most recent readiness -> recovery, plus 7-day trends
     readiness_list = readiness.get("data") or []
     readiness_list.sort(key=lambda x: x.get("day") or "", reverse=True)
     readiness_score: int | float | None = None
@@ -161,6 +161,43 @@ async def fetch_oura_biometrics(access_token: str) -> BiometricData:
     if resting_hr_from_readiness is not None:
         resting_hr_bpm = resting_hr_from_readiness
 
+    # Weekly aggregates for context (used especially for weekly plans)
+    def _avg(items: list[dict[str, Any]], key: str) -> float | None:
+        vals = [v for v in (it.get(key) for it in items) if v is not None]
+        if not vals:
+            return None
+        return float(sum(vals) / len(vals))
+
+    avg_readiness = _avg(readiness_list, "score")
+    avg_sleep = _avg(sleep_list, "score")
+    avg_steps = _avg(activity_list, "steps")
+
+    readiness_trend = "flat"
+    if len(readiness_list) >= 2:
+        latest_r = readiness_list[0].get("score")
+        oldest_r = readiness_list[-1].get("score")
+        try:
+            if latest_r is not None and oldest_r is not None:
+                diff = float(latest_r) - float(oldest_r)
+                if diff >= 5:
+                    readiness_trend = "up"
+                elif diff <= -5:
+                    readiness_trend = "down"
+        except (TypeError, ValueError):
+            readiness_trend = "flat"
+
+    weekly_parts: list[str] = []
+    if avg_readiness is not None:
+        weekly_parts.append(f"avg_readiness={avg_readiness:.1f}")
+        weekly_parts.append(f"recovery_trend={readiness_trend}")
+    if avg_sleep is not None:
+        weekly_parts.append(f"avg_sleep_score={avg_sleep:.1f}")
+    if avg_steps is not None:
+        weekly_parts.append(f"avg_steps_per_day={int(avg_steps)}")
+    weekly_summary = ""
+    if weekly_parts:
+        weekly_summary = "Last 7 days: " + ", ".join(weekly_parts)
+
     recovery_status = _score_to_recovery(readiness_score)
 
     return BiometricData(
@@ -173,4 +210,5 @@ async def fetch_oura_biometrics(access_token: str) -> BiometricData:
         diet_style="balanced",
         calorie_target=2000,
         allergies=None,
+        weekly_summary=weekly_summary or None,
     )

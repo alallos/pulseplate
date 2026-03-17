@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 
 class BiometricData(BaseModel):
-    """Mock/current biometric snapshot from wearables (e.g., Oura)."""
+    """Current snapshot + optional weekly summary from wearables (e.g., Oura)."""
 
     sleep_score: float = Field(..., ge=0, le=100, description="Sleep score out of 100")
     recovery_status: str = Field(
@@ -25,6 +25,10 @@ class BiometricData(BaseModel):
     measurement_system: str = Field(
         default="us",
         description="Units for quantities: 'us' (cups, oz, lb) or 'metric' (g, kg, ml, L)",
+    )
+    weekly_summary: Optional[str] = Field(
+        default=None,
+        description="Optional natural-language summary of the last 7 days (readiness, sleep, activity trends).",
     )
 
 
