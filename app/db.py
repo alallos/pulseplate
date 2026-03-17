@@ -56,6 +56,7 @@ def init_db() -> None:
                     diet_style TEXT,
                     calorie_target INTEGER,
                     allergies TEXT,
+                    measurement_system TEXT DEFAULT 'us',
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
@@ -73,6 +74,10 @@ def init_db() -> None:
             """)
             cur.execute("CREATE INDEX IF NOT EXISTS idx_plans_user_id ON plans(user_id)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_plans_generated_at ON plans(generated_at)")
+            try:
+                cur.execute("ALTER TABLE users ADD COLUMN measurement_system TEXT DEFAULT 'us'")
+            except Exception:
+                pass
         else:
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS users (
@@ -86,11 +91,12 @@ def init_db() -> None:
                     diet_style TEXT,
                     calorie_target INTEGER,
                     allergies TEXT,
+                    measurement_system TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
             """)
-            for col in ("email", "oura_user_id"):
+            for col in ("email", "oura_user_id", "measurement_system"):
                 try:
                     cur.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
                 except sqlite3.OperationalError:
@@ -209,21 +215,25 @@ def get_user_preferences(user_id: int = DEFAULT_USER_ID) -> dict[str, Any]:
     with _get_conn() as conn:
         cur = conn.cursor()
         cur.execute(
-            _q("SELECT goals, diet_style, calorie_target, allergies FROM users WHERE id = ?"),
+            _q("SELECT goals, diet_style, calorie_target, allergies, measurement_system FROM users WHERE id = ?"),
             (user_id,),
         )
         row = cur.fetchone()
     if not row:
-        return {"goals": [], "diet_style": "balanced", "calorie_target": 2000, "allergies": None}
+        return {"goals": [], "diet_style": "balanced", "calorie_target": 2000, "allergies": None, "measurement_system": "us"}
     goals = json.loads(row[0]) if row[0] else []
     diet_style = row[1] or "balanced"
     calorie_target = row[2] if row[2] is not None else 2000
     allergies = json.loads(row[3]) if row[3] else None
+    measurement_system = (row[4] if len(row) > 4 else None) or "us"
+    if measurement_system not in ("us", "metric"):
+        measurement_system = "us"
     return {
         "goals": goals,
         "diet_style": diet_style,
         "calorie_target": calorie_target,
         "allergies": allergies,
+        "measurement_system": measurement_system,
     }
 
 
@@ -233,6 +243,7 @@ def set_user_preferences(
     diet_style: str | None = None,
     calorie_target: int | None = None,
     allergies: list[str] | None = None,
+    measurement_system: str | None = None,
 ) -> None:
     """Update saved preferences. Creates user row if missing."""
     now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -245,12 +256,14 @@ def set_user_preferences(
         prefs["calorie_target"] = calorie_target
     if allergies is not None:
         prefs["allergies"] = allergies
+    if measurement_system is not None and measurement_system in ("us", "metric"):
+        prefs["measurement_system"] = measurement_system
     with _get_conn() as conn:
         cur = conn.cursor()
         if _use_pg:
             cur.execute(
                 _q("""
-                    UPDATE users SET goals = ?, diet_style = ?, calorie_target = ?, allergies = ?, updated_at = ?
+                    UPDATE users SET goals = ?, diet_style = ?, calorie_target = ?, allergies = ?, measurement_system = ?, updated_at = ?
                     WHERE id = ?
                 """),
                 (
@@ -258,6 +271,7 @@ def set_user_preferences(
                     prefs["diet_style"],
                     prefs["calorie_target"],
                     json.dumps(prefs["allergies"]) if prefs["allergies"] is not None else None,
+                    prefs.get("measurement_system", "us"),
                     now,
                     user_id,
                 ),
@@ -265,8 +279,8 @@ def set_user_preferences(
             if cur.rowcount == 0:
                 cur.execute(
                     _q("""
-                        INSERT INTO users (id, goals, diet_style, calorie_target, allergies, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        INSERT INTO users (id, goals, diet_style, calorie_target, allergies, measurement_system, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """),
                     (
                         user_id,
@@ -274,6 +288,7 @@ def set_user_preferences(
                         prefs["diet_style"],
                         prefs["calorie_target"],
                         json.dumps(prefs["allergies"]) if prefs["allergies"] is not None else None,
+                        prefs.get("measurement_system", "us"),
                         now,
                         now,
                     ),
@@ -281,13 +296,14 @@ def set_user_preferences(
         else:
             cur.execute(
                 _q("""
-                    INSERT INTO users (id, goals, diet_style, calorie_target, allergies, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO users (id, goals, diet_style, calorie_target, allergies, measurement_system, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         goals = excluded.goals,
                         diet_style = excluded.diet_style,
                         calorie_target = excluded.calorie_target,
                         allergies = excluded.allergies,
+                        measurement_system = excluded.measurement_system,
                         updated_at = excluded.updated_at
                 """),
                 (
@@ -296,6 +312,7 @@ def set_user_preferences(
                     prefs["diet_style"],
                     prefs["calorie_target"],
                     json.dumps(prefs["allergies"]) if prefs["allergies"] is not None else None,
+                    prefs.get("measurement_system", "us"),
                     now,
                     now,
                 ),

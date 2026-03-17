@@ -248,6 +248,7 @@ async def update_preferences(
         diet_style=overrides.diet_style,
         calorie_target=overrides.calorie_target,
         allergies=overrides.allergies,
+        measurement_system=overrides.measurement_system,
     )
     return get_user_preferences(user_id)
 
@@ -348,6 +349,7 @@ async def generate_meal_plan_from_oura(
             diet_style=saved["diet_style"],
             calorie_target=saved["calorie_target"],
             allergies=saved["allergies"],
+            measurement_system=saved.get("measurement_system", "us"),
         )
     else:
         o = overrides or MealPlanFromOuraOverrides()
@@ -359,6 +361,7 @@ async def generate_meal_plan_from_oura(
             "diet_style": o.diet_style or biometrics.diet_style,
             "calorie_target": o.calorie_target,
             "allergies": o.allergies if o.allergies is not None else biometrics.allergies,
+            "measurement_system": o.measurement_system or biometrics.measurement_system,
         }
     )
     if weekly_prep:

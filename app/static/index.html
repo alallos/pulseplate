@@ -440,6 +440,13 @@
           </select>
         </div>
         <div class="form-group">
+          <label>Measurements</label>
+          <select id="measurementSystem">
+            <option value="us">US (cups, oz, lb)</option>
+            <option value="metric">Metric (g, kg, ml, L)</option>
+          </select>
+        </div>
+        <div class="form-group">
           <label>Daily calorie target</label>
           <input type="number" id="calorieTarget" min="1000" max="5000" step="100" value="2000">
         </div>
@@ -503,6 +510,7 @@
     const prefsToggle = document.getElementById('prefsToggle');
     const prefsBody = document.getElementById('prefsBody');
     const dietStyle = document.getElementById('dietStyle');
+    const measurementSystem = document.getElementById('measurementSystem');
     const calorieTarget = document.getElementById('calorieTarget');
     const goalFatLoss = document.getElementById('goalFatLoss');
     const goalMuscle = document.getElementById('goalMuscle');
@@ -646,6 +654,7 @@
         const data = await r.json();
         if (r.ok) {
           dietStyle.value = data.diet_style || 'balanced';
+          measurementSystem.value = (data.measurement_system === 'metric' ? 'metric' : 'us');
           calorieTarget.value = data.calorie_target ?? 2000;
           const goals = data.goals || [];
           goalFatLoss.checked = goals.includes('fat_loss');
@@ -749,6 +758,7 @@
           body: JSON.stringify({
             goals,
             diet_style: dietStyle.value,
+            measurement_system: measurementSystem.value,
             calorie_target: parseInt(calorieTarget.value, 10) || 2000,
             allergies,
           }),

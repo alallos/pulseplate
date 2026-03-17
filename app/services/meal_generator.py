@@ -44,7 +44,8 @@ CRITICAL: You must respond with ONLY valid JSON and nothing else. No markdown, n
 Rules:
 - summary: One clear sentence explaining why this plan fits today's recovery and goals.
 - meals: Include at least 3 main eating occasions (e.g. Breakfast, Lunch, Dinner) plus 1–2 snacks. Each meal must have type, name, description, and calories (integer).
-- grocery_list: Every ingredient needed for the day, each with "item" and "quantity" (e.g. "200g", "2 medium", "as needed"). No duplicates.
+- grocery_list: Every ingredient needed for the day, each with "item" and "quantity". No duplicates.
+- Units: If the user's measurement_system is "us", use US customary units for all quantities (cups, fl oz, lb, oz, tbsp, tsp). If "metric", use metric (g, kg, ml, L). Apply to both meal descriptions and grocery_list quantities.
 - Respect allergies strictly (e.g. if nuts: zero tree nuts or peanuts).
 - Total meal calories should be close to the user's calorie_target.
 - Diet style (mediterranean, keto, etc.) and goals (fat_loss, stable_glucose, etc.) must shape the plan."""
@@ -76,6 +77,7 @@ Rules:
 - summary: One paragraph explaining the weekly approach (batch-friendly, shared ingredients, how it fits recovery/goals).
 - days: Array of 5–7 day objects. Each day has "day" (e.g. Monday) and "meals" (3–4 meals: breakfast, lunch, dinner, optional snack). Use quick-assembly breakfasts (e.g. overnight oats base + daily toppings, or batch-made frittata) since the plan is used after overnight data.
 - grocery_list: ONE consolidated list for the whole week. Quantities scaled for the week. Include "prep_notes" where helpful (e.g. "Batch grill Sunday", "Cook in bulk", "Overnight oats base for week"). Minimize waste and reuse ingredients across days.
+- Units: If the user's measurement_system is "us", use US customary units (cups, fl oz, lb, oz, tbsp, tsp) for all quantities in days and grocery_list. If "metric", use metric (g, kg, ml, L).
 - Batch-friendly: recipes that scale, store well, reheat well; shared bases (e.g. large batch of grilled chicken, lentil soup, roasted veggies).
 - Respect allergies strictly. Match diet_style and goals. Target calorie_target per day.
 """

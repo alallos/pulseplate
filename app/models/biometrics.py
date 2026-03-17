@@ -22,6 +22,10 @@ class BiometricData(BaseModel):
     )
     calorie_target: int = Field(..., gt=1000, description="Daily calorie goal")
     allergies: Optional[List[str]] = Field(default=None, description="e.g. ['nuts', 'dairy']")
+    measurement_system: str = Field(
+        default="us",
+        description="Units for quantities: 'us' (cups, oz, lb) or 'metric' (g, kg, ml, L)",
+    )
 
 
 class MealPlanFromOuraOverrides(BaseModel):
@@ -31,6 +35,10 @@ class MealPlanFromOuraOverrides(BaseModel):
     diet_style: str = Field(default="balanced", description="e.g. 'mediterranean', 'keto'")
     calorie_target: int = Field(default=2000, gt=1000, description="Daily calorie goal")
     allergies: Optional[List[str]] = Field(default=None, description="e.g. ['nuts', 'dairy']")
+    measurement_system: str = Field(
+        default="us",
+        description="'us' (cups, oz, lb) or 'metric' (g, kg, ml, L)",
+    )
 
 
 class MealPlanResponse(BaseModel):
