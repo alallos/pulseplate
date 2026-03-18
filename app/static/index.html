@@ -528,7 +528,11 @@
       <div class="grocery" id="planGrocery"></div>
       <div id="copyGroceryWrap" class="grocery-actions" style="display: none;">
         <button type="button" class="secondary" id="copyGroceryBtn">Copy grocery list</button>
+        <button type="button" class="secondary" id="shareGroceryBtn">Share grocery</button>
+        <button type="button" class="secondary" id="downloadGroceryBtn">Download grocery .txt</button>
         <button type="button" class="secondary" id="copyFullPlanBtn">Copy full plan</button>
+        <button type="button" class="secondary" id="shareFullPlanBtn">Share full plan</button>
+        <button type="button" class="secondary" id="downloadFullPlanBtn">Download full plan .txt</button>
       </div>
     </div>
 
@@ -580,7 +584,11 @@
     const onboardingToggle = document.getElementById('onboardingToggle');
     const copyGroceryWrap = document.getElementById('copyGroceryWrap');
     const copyGroceryBtn = document.getElementById('copyGroceryBtn');
+    const shareGroceryBtn = document.getElementById('shareGroceryBtn');
+    const downloadGroceryBtn = document.getElementById('downloadGroceryBtn');
     const copyFullPlanBtn = document.getElementById('copyFullPlanBtn');
+    const shareFullPlanBtn = document.getElementById('shareFullPlanBtn');
+    const downloadFullPlanBtn = document.getElementById('downloadFullPlanBtn');
 
     let planMode = 'daily';
     let lastGroceryList = [];
@@ -955,6 +963,25 @@
       return lines.join('\n');
     }
 
+    function downloadTextFile(filename, text) {
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    async function tryShareText({ title, text }) {
+      // Web Share API (mobile-friendly). If unavailable, return false to allow fallback.
+      if (!navigator.share) return false;
+      await navigator.share({ title, text, url: window.location.href });
+      return true;
+    }
+
     copyGroceryBtn.addEventListener('click', async () => {
       const text = buildGroceryListText();
       if (!text) return;
@@ -968,6 +995,37 @@
       }
     });
 
+    shareGroceryBtn.addEventListener('click', async () => {
+      const text = buildGroceryListText();
+      if (!text) return;
+      try {
+        const shared = await tryShareText({ title: 'PulsePlate - Grocery list', text });
+        if (!shared) {
+          await navigator.clipboard.writeText(text);
+          showMessage('Sharing not supported here; copied to clipboard instead.', 'success');
+        }
+      } catch (e) {
+        // If the user cancels the share sheet, don't show an error.
+        if (e && (e.name === 'AbortError')) return;
+        showMessage('Could not share. Try copying or downloading instead.', 'error');
+      }
+    });
+
+    downloadGroceryBtn.addEventListener('click', async () => {
+      const text = buildGroceryListText();
+      if (!text) return;
+      try {
+        const isWeekly = Array.isArray(lastPlan?.days);
+        const dateStr = new Date().toISOString().slice(0, 10);
+        const filename = isWeekly
+          ? `pulseplate_grocery_week_${dateStr}.txt`
+          : `pulseplate_grocery_today_${dateStr}.txt`;
+        downloadTextFile(filename, text);
+      } catch (_) {
+        showMessage('Could not download. Try copying the list instead.', 'error');
+      }
+    });
+
     copyFullPlanBtn.addEventListener('click', async () => {
       const text = buildFullPlanText();
       if (!text) return;
@@ -978,6 +1036,37 @@
         setTimeout(() => { copyFullPlanBtn.textContent = label; }, 2000);
       } catch (_) {
         showMessage('Could not copy. Try selecting the plan manually.', 'error');
+      }
+    });
+
+    shareFullPlanBtn.addEventListener('click', async () => {
+      const text = buildFullPlanText();
+      if (!text) return;
+      try {
+        const shared = await tryShareText({ title: 'PulsePlate - Full plan', text });
+        if (!shared) {
+          await navigator.clipboard.writeText(text);
+          showMessage('Sharing not supported here; copied to clipboard instead.', 'success');
+        }
+      } catch (e) {
+        // If the user cancels the share sheet, don't show an error.
+        if (e && (e.name === 'AbortError')) return;
+        showMessage('Could not share. Try copying or downloading instead.', 'error');
+      }
+    });
+
+    downloadFullPlanBtn.addEventListener('click', async () => {
+      const text = buildFullPlanText();
+      if (!text) return;
+      try {
+        const isWeekly = Array.isArray(lastPlan?.days);
+        const dateStr = new Date().toISOString().slice(0, 10);
+        const filename = isWeekly
+          ? `pulseplate_fullplan_week_${dateStr}.txt`
+          : `pulseplate_fullplan_today_${dateStr}.txt`;
+        downloadTextFile(filename, text);
+      } catch (_) {
+        showMessage('Could not download. Try copying the plan instead.', 'error');
       }
     });
 
