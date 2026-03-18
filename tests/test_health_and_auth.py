@@ -1,10 +1,26 @@
 import os
+import uuid
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
+import app.main as main_module
 from app.main import app
+
+
+@pytest.fixture(autouse=True)
+def _disable_slowapi_rate_limit():
+    """
+    slowapi uses an in-memory limiter keyed by client address.
+    TestClient often reports the same "remote" identity, so we override the limiter
+    key func to be unique per request and reset storage before each test.
+    """
+    limiter = getattr(main_module.app.state, "limiter", None)
+    if limiter is None:
+        return
+    limiter.reset()
+    limiter._key_func = lambda request: str(uuid.uuid4())
 
 # Minimal valid payload for POST /generate-meal-plan
 BIOMETRIC_PAYLOAD = {
@@ -67,7 +83,11 @@ def test_generate_meal_plan_daily_returns_plan(mock_daily):
         "grocery_list": [{"item": "Oats", "quantity": "1 cup"}, {"item": "Chicken", "quantity": "6 oz"}],
     }
     with TestClient(app) as c:
-        response = c.post("/generate-meal-plan", json=BIOMETRIC_PAYLOAD)
+        response = c.post(
+            "/generate-meal-plan",
+            json=BIOMETRIC_PAYLOAD,
+            headers={"X-Forwarded-For": "127.0.0.1"},
+        )
     assert response.status_code == 200
     data = response.json()
     assert "summary" in data
@@ -104,6 +124,7 @@ def test_generate_meal_plan_weekly_returns_plan(mock_weekly):
             "/generate-meal-plan",
             json=BIOMETRIC_PAYLOAD,
             params={"weekly_prep": True, "weekly_days": 7},
+            headers={"X-Forwarded-For": "127.0.0.2"},
         )
     assert response.status_code == 200
     data = response.json()
@@ -114,4 +135,75 @@ def test_generate_meal_plan_weekly_returns_plan(mock_weekly):
     assert "grocery_list" in data
     assert len(data["grocery_list"]) >= 1
     mock_weekly.assert_called_once()
+
+
+def test_generate_meal_plan_daily_returns_503_when_grok_api_key_missing(client, monkeypatch):
+    monkeypatch.delenv("GROK_API_KEY", raising=False)
+    response = client.post(
+        "/generate-meal-plan",
+        json=BIOMETRIC_PAYLOAD,
+        headers={"X-Forwarded-For": "127.0.0.3"},
+    )
+    assert response.status_code == 503
+    data = response.json()
+    assert "GROK_API_KEY is not configured" in data.get("detail", "")
+
+
+def test_generate_meal_plan_weekly_returns_503_when_grok_api_key_missing(client, monkeypatch):
+    monkeypatch.delenv("GROK_API_KEY", raising=False)
+    response = client.post(
+        "/generate-meal-plan",
+        json=BIOMETRIC_PAYLOAD,
+        params={"weekly_prep": True, "weekly_days": 7},
+        headers={"X-Forwarded-For": "127.0.0.4"},
+    )
+    assert response.status_code == 503
+    data = response.json()
+    assert "GROK_API_KEY is not configured" in data.get("detail", "")
+
+
+def test_generate_meal_plan_weekly_days_out_of_bounds_returns_422(client):
+    # Endpoint query params enforce ge=5, le=7 at the FastAPI layer.
+    response = client.post(
+        "/generate-meal-plan",
+        json=BIOMETRIC_PAYLOAD,
+        params={"weekly_prep": True, "weekly_days": 4},
+        headers={"X-Forwarded-For": "127.0.0.5"},
+    )
+    assert response.status_code == 422
+
+
+@patch("app.services.meal_generator._call_grok_raw", new_callable=AsyncMock)
+def test_generate_meal_plan_daily_invalid_grok_response_returns_502(mock_call, client):
+    mock_call.return_value = {
+        "summary": "Bad payload",
+        "meals": "not-a-list",
+        "grocery_list": [],
+    }
+    response = client.post(
+        "/generate-meal-plan",
+        json=BIOMETRIC_PAYLOAD,
+        headers={"X-Forwarded-For": "127.0.0.6"},
+    )
+    assert response.status_code == 502
+    data = response.json()
+    assert data.get("detail", "").startswith("Grok response did not match MealPlanResponse schema:")
+
+
+@patch("app.services.meal_generator._call_grok_raw", new_callable=AsyncMock)
+def test_generate_meal_plan_weekly_invalid_grok_response_returns_502(mock_call, client):
+    mock_call.return_value = {
+        "summary": "Bad payload",
+        "days": "not-a-list",
+        "grocery_list": [],
+    }
+    response = client.post(
+        "/generate-meal-plan",
+        json=BIOMETRIC_PAYLOAD,
+        params={"weekly_prep": True, "weekly_days": 7},
+        headers={"X-Forwarded-For": "127.0.0.7"},
+    )
+    assert response.status_code == 502
+    data = response.json()
+    assert data.get("detail", "").startswith("Grok response did not match WeeklyMealPlanResponse schema:")
 
