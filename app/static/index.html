@@ -25,7 +25,11 @@
     * { box-sizing: border-box; }
     body {
       font-family: "Segoe UI", system-ui, sans-serif;
-      background: var(--bg);
+      background:
+        radial-gradient(1200px circle at 10% -10%, rgba(88, 166, 255, 0.18), transparent 45%),
+        radial-gradient(900px circle at 90% 0%, rgba(63, 185, 80, 0.10), transparent 40%),
+        radial-gradient(700px circle at 50% 110%, rgba(248, 81, 73, 0.06), transparent 45%),
+        var(--bg);
       color: var(--text);
       margin: 0;
       min-height: 100vh;
@@ -40,12 +44,29 @@
       margin-bottom: 2rem;
       padding-bottom: 1.5rem;
       border-bottom: 1px solid var(--border);
+      position: relative;
+    }
+    .header::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: -1px;
+      height: 2px;
+      background: linear-gradient(90deg, rgba(88, 166, 255, 0.0), rgba(88, 166, 255, 0.55), rgba(88, 166, 255, 0.0));
+      pointer-events: none;
     }
     h1 {
       font-size: 1.6rem;
       font-weight: 700;
       margin: 0 0 0.35rem 0;
       letter-spacing: -0.02em;
+    }
+    h1 {
+      background: linear-gradient(90deg, rgba(230, 237, 243, 1), rgba(121, 184, 255, 1));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
     }
     .tagline {
       color: var(--muted);
@@ -78,15 +99,41 @@
       border-radius: 10px;
       padding: 1.25rem 1.5rem;
       margin-bottom: 1rem;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    }
+    .card:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 14px 40px rgba(0,0,0,0.33);
+      border-color: rgba(88, 166, 255, 0.35);
     }
     .status {
       font-size: 0.875rem;
       color: var(--muted);
       margin-bottom: 1rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.35rem 0.65rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
     }
     .status.connected { color: var(--success); }
+    .status.connected {
+      background: rgba(63, 185, 80, 0.12);
+      border-color: rgba(63, 185, 80, 0.35);
+    }
     .status.error { color: var(--error); }
+    .status.error {
+      background: rgba(248, 81, 73, 0.10);
+      border-color: rgba(248, 81, 73, 0.35);
+    }
     .status.loading { color: var(--muted); }
+    .status.loading {
+      background: rgba(139, 148, 158, 0.10);
+      border-color: rgba(139, 148, 158, 0.25);
+    }
     .status.connected::before {
       content: "● ";
       color: var(--success);
@@ -95,7 +142,7 @@
       display: inline-flex;
       align-items: center;
       gap: 0.5rem;
-      background: var(--accent);
+      background: linear-gradient(135deg, rgba(88, 166, 255, 1), rgba(121, 184, 255, 1));
       color: #fff;
       text-decoration: none;
       padding: 0.6rem 1.2rem;
@@ -104,10 +151,13 @@
       font-weight: 500;
       border: none;
       cursor: pointer;
-      transition: background 0.15s;
+      transition: transform 0.15s, box-shadow 0.15s, filter 0.15s;
+      box-shadow: 0 14px 34px rgba(88, 166, 255, 0.20);
     }
     a.button:hover, button.primary:hover {
-      background: var(--accent-hover);
+      transform: translateY(-1px);
+      filter: brightness(1.05);
+      box-shadow: 0 18px 44px rgba(88, 166, 255, 0.26);
     }
     a.button:focus-visible, button.primary:focus-visible,
     button.secondary:focus-visible {
@@ -130,8 +180,13 @@
       font-size: 0.875rem;
       cursor: pointer;
       margin-top: 0.5rem;
+      transition: background 0.15s, border-color 0.15s, transform 0.15s;
     }
-    button.secondary:hover { border-color: var(--accent); }
+    button.secondary:hover {
+      border-color: rgba(88, 166, 255, 0.75);
+      background: rgba(88, 166, 255, 0.06);
+      transform: translateY(-1px);
+    }
     .spinner {
       display: inline-block;
       width: 1em;
