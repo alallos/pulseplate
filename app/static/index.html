@@ -1078,13 +1078,36 @@
       getPlanBtn.innerHTML = '<span class="spinner"></span> ' + (isWeekly ? 'Generating weekly plan…' : 'Generating…');
       const url = '/generate-meal-plan/from-oura' + (isWeekly ? '?weekly_prep=true&weekly_days=' + days : '');
       try {
+        // Preflight: ensure the backend is ready to call Grok (prevents confusing mid-request failures).
+        try {
+          const readyResp = await fetch('/health/ready', { method: 'GET' });
+          if (!readyResp.ok) {
+            let msg = 'AI is temporarily unavailable. Try again in a moment.';
+            if (readyResp.status === 429) msg = 'Too many requests. Please wait and try again.';
+            try {
+              const readyData = await readyResp.json();
+              if (readyData && readyData.detail) msg = readyData.detail;
+            } catch (_) {}
+            showMessage(msg, 'error');
+            return;
+          }
+        } catch (_) {
+          showMessage('Could not reach the server readiness check. Try again.', 'error');
+          return;
+        }
+
         const r = await fetch(url, {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({}),
         });
-        const data = await r.json();
+        let data = {};
+        try {
+          data = await r.json();
+        } catch (_) {
+          data = {};
+        }
         if (r.ok) {
           if (data.days) {
             renderWeeklyPlan(data);
@@ -1096,12 +1119,16 @@
           loadHistory();
         } else {
           let msg = 'Failed to generate plan.';
+          if (r.status === 429) msg = 'Too many requests. Please wait a bit and try again.';
+          if (r.status === 503) msg = 'AI is temporarily unavailable. Try again in a moment.';
           if (typeof data.detail === 'string') msg = data.detail;
           else if (Array.isArray(data.detail) && data.detail.length) msg = data.detail.map(d => d.msg || d).join(' ');
           else if (data.detail?.msg) msg = data.detail.msg;
+          else if (data.detail && typeof data.detail === 'object') msg = data.detail.msg || msg;
           showMessage(msg, 'error');
         }
       } catch (e) {
+        // Fetch/network error (server unreachable / TLS / DNS, etc.)
         showMessage('Request failed. Check your connection and try again.', 'error');
       } finally {
         getPlanBtn.disabled = false;
