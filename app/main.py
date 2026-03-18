@@ -331,7 +331,7 @@ async def generate_meal_plan(
     Generate a meal plan + grocery list from biometrics.
 
     - **Daily mode** (`weekly_prep=false`, default): Same-day plan via Grok API.
-    - **Weekly mode** (`weekly_prep=true`): 5–7 day batch/meal-prep plan; batch-friendly recipes, consolidated grocery list with prep notes. Currently uses mock data; Grok integration planned.
+    - **Weekly mode** (`weekly_prep=true`): 5–7 day batch/meal-prep plan via Grok API; batch-friendly recipes, consolidated grocery list with prep notes.
     """
     if weekly_prep:
         return await generate_weekly_meal_plan(biometrics, days=weekly_days)
