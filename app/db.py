@@ -210,6 +210,28 @@ def set_oura_tokens(
             )
 
 
+def clear_oura_tokens(user_id: int) -> None:
+    """Remove Oura tokens for the user (disconnect)."""
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    with _get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            _q("""
+                UPDATE users
+                SET oura_access_token = NULL, oura_refresh_token = NULL, oura_expires_at = NULL, updated_at = ?
+                WHERE id = ?
+            """),
+            (now, user_id),
+        )
+
+
+def delete_user_data(user_id: int) -> None:
+    """Delete user's plans and user row (data deletion)."""
+    with _get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(_q("DELETE FROM plans WHERE user_id = ?"), (user_id,))
+        cur.execute(_q("DELETE FROM users WHERE id = ?"), (user_id,))
+
 def get_user_preferences(user_id: int = DEFAULT_USER_ID) -> dict[str, Any]:
     """Return saved preferences. Defaults if not set."""
     with _get_conn() as conn:

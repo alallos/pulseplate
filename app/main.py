@@ -48,6 +48,8 @@ from app.db import (
     set_user_preferences,
     get_or_create_user_by_email,
     set_oura_tokens,
+    clear_oura_tokens,
+    delete_user_data,
     save_plan,
     get_plans,
     get_plan_by_id,
@@ -227,6 +229,32 @@ async def oura_callback(
         max_age=60 * 60 * 24 * 7,  # 7 days
         samesite="lax",
     )
+    return response
+
+
+@app.post("/auth/logout", summary="Log out (clear session cookie)")
+async def logout():
+    """Clear the session cookie on the client."""
+    response = RedirectResponse(url="/", status_code=302)
+    response.delete_cookie(key="session")
+    return response
+
+
+@app.post("/auth/disconnect", summary="Disconnect Oura (clear tokens) and log out")
+async def disconnect_oura(user_id: CurrentUserId):
+    """Clear Oura tokens for this user and end the session."""
+    clear_oura_tokens(user_id)
+    response = RedirectResponse(url="/?oura=disconnected", status_code=302)
+    response.delete_cookie(key="session")
+    return response
+
+
+@app.post("/account/delete", summary="Delete my data (plans + user) and log out")
+async def delete_account(user_id: CurrentUserId):
+    """Delete plan history and user record for this user, then end the session."""
+    delete_user_data(user_id)
+    response = RedirectResponse(url="/?account=deleted", status_code=302)
+    response.delete_cookie(key="session")
     return response
 
 

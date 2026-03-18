@@ -399,6 +399,11 @@
       <div id="status" class="status loading">Checking Oura connection…</div>
       <a id="connectBtn" href="/auth/oura/authorize" class="button" style="display: none;">Connect Oura</a>
       <div id="actions" style="display: none;">
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom: 0.75rem;">
+          <button type="button" class="secondary" id="logoutBtn">Log out</button>
+          <button type="button" class="secondary" id="disconnectBtn">Disconnect Oura</button>
+          <button type="button" class="secondary" id="deleteDataBtn" style="border-color: rgba(248,81,73,0.6); color: var(--error);">Delete my data</button>
+        </div>
         <div class="mode-tabs" role="tablist">
           <button type="button" role="tab" id="modeDaily" class="active" aria-selected="true">Today</button>
           <button type="button" role="tab" id="modeWeekly" aria-selected="false">Weekly prep</button>
@@ -537,6 +542,9 @@
     const modeWeekly = document.getElementById('modeWeekly');
     const weeklyDaysWrap = document.getElementById('weeklyDaysWrap');
     const weeklyDays = document.getElementById('weeklyDays');
+    const logoutBtn = document.getElementById('logoutBtn');
+    const disconnectBtn = document.getElementById('disconnectBtn');
+    const deleteDataBtn = document.getElementById('deleteDataBtn');
     const historyCard = document.getElementById('historyCard');
     const historyList = document.getElementById('historyList');
     const historyEmpty = document.getElementById('historyEmpty');
@@ -976,10 +984,34 @@
       showMessage('Oura connected. You can get your meal plan below.', 'success');
       history.replaceState({}, '', location.pathname);
     }
+    if (params.get('oura') === 'disconnected') {
+      showMessage('Disconnected. You can reconnect Oura any time.', 'success');
+      history.replaceState({}, '', location.pathname);
+    }
+    if (params.get('account') === 'deleted') {
+      showMessage('Your data was deleted.', 'success');
+      history.replaceState({}, '', location.pathname);
+    }
     if (params.get('oura_error')) {
       showMessage('Oura connection failed: ' + params.get('oura_error'), 'error');
       history.replaceState({}, '', location.pathname);
     }
+
+    async function postRedirect(path) {
+      await fetch(path, { method: 'POST', credentials: 'include' });
+      // endpoints redirect; browser fetch won't follow to top-level navigation
+      window.location.href = '/';
+    }
+
+    logoutBtn.addEventListener('click', () => postRedirect('/auth/logout'));
+    disconnectBtn.addEventListener('click', () => {
+      if (!confirm('Disconnect Oura? You can reconnect later.')) return;
+      postRedirect('/auth/disconnect');
+    });
+    deleteDataBtn.addEventListener('click', () => {
+      if (!confirm('Delete ALL your saved plans and preferences? This cannot be undone.')) return;
+      postRedirect('/account/delete');
+    });
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
