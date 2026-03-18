@@ -705,7 +705,7 @@
             ${data.weekly_summary ? `
               <div class="weekly-summary-box">
                 <div class="weekly-summary-title">Last 7 days context</div>
-                <div class="weekly-summary-text">${data.weekly_summary}</div>
+                <div class="weekly-summary-text">${formatWeeklySummary(data.weekly_summary)}</div>
               </div>
             ` : ''}
           `;
@@ -988,6 +988,55 @@
         lines.push(groceryText);
       }
       return lines.join('\n');
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      }[c]));
+    }
+
+    // Convert backend weekly_summary (e.g. "Last 7 days: avg_readiness=..., ...")
+    // into a more readable multi-line string.
+    function formatWeeklySummary(summary) {
+      if (!summary || typeof summary !== 'string') return '';
+      const match = summary.match(/^Last 7 days:\s*(.*)$/i);
+      const body = match ? match[1] : summary;
+      const parts = body.split(/\s*,\s*/).filter(Boolean);
+
+      const labels = {
+        avg_readiness: 'Avg readiness',
+        recovery_trend: 'Recovery trend',
+        avg_sleep_score: 'Avg sleep score',
+        avg_steps_per_day: 'Avg steps/day',
+      };
+
+      const lines = [];
+      parts.forEach(part => {
+        const kv = part.split('=', 2);
+        if (kv.length !== 2) return;
+        const key = kv[0].trim();
+        let value = kv[1].trim();
+
+        if (key === 'avg_steps_per_day') {
+          const n = Number(value);
+          if (!Number.isNaN(n)) value = n.toLocaleString();
+        }
+        if (key === 'recovery_trend') {
+          if (value === 'down') value = 'Down';
+          else if (value === 'up') value = 'Up';
+          else if (value === 'flat') value = 'Stable';
+        }
+
+        const label = labels[key] || key;
+        lines.push(`${label}: ${value}`);
+      });
+
+      return escapeHtml(lines.join('\n'));
     }
 
     function downloadTextFile(filename, text) {
