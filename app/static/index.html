@@ -70,8 +70,17 @@
     }
     .tagline {
       color: var(--muted);
-      font-size: 0.9rem;
+      font-size: 1rem;
       margin: 0;
+      max-width: 48ch;
+    }
+    .tagline-emph {
+      color: var(--text);
+      font-weight: 700;
+      background: linear-gradient(90deg, rgba(88,166,255,1), rgba(63,185,80,1));
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
     }
     h2 {
       font-size: 1rem;
@@ -94,13 +103,15 @@
     }
     h2 .toggle:hover { text-decoration: underline; }
     .card {
-      background: var(--surface);
+      background: rgba(26, 35, 50, 0.72);
       border: 1px solid var(--border);
       border-radius: 10px;
       padding: 1.25rem 1.5rem;
       margin-bottom: 1rem;
       box-shadow: 0 10px 30px rgba(0,0,0,0.25);
       transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
     }
     .card:hover {
       transform: translateY(-1px);
@@ -117,7 +128,9 @@
       padding: 0.35rem 0.65rem;
       border-radius: 999px;
       border: 1px solid var(--border);
-      background: rgba(255,255,255,0.02);
+      background: rgba(255,255,255,0.05);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
     }
     .status.connected { color: var(--success); }
     .status.connected {
@@ -187,6 +200,10 @@
       background: rgba(88, 166, 255, 0.06);
       transform: translateY(-1px);
     }
+    button.secondary:active,
+    button.primary:active {
+      transform: translateY(0) scale(0.99);
+    }
     .spinner {
       display: inline-block;
       width: 1em;
@@ -238,8 +255,15 @@
       margin-top: 1.5rem;
       animation: fadeIn 0.3s ease;
     }
-    #planResult.visible { display: block; }
+    #planResult.visible {
+      display: block;
+      animation: planIn 0.35s ease;
+    }
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes planIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
     .plan-meta {
       font-size: 0.75rem;
       color: var(--muted);
@@ -296,10 +320,22 @@
     .prefs-body { overflow: hidden; transition: opacity 0.2s ease; }
     .prefs-body.collapsed { display: none; }
     .message {
-      margin-top: 1rem;
+      position: fixed;
+      left: 50%;
+      bottom: 1.1rem;
+      transform: translateX(-50%);
+      z-index: 9999;
+      width: min(520px, calc(100vw - 2rem));
       padding: 0.75rem 1rem;
-      border-radius: 8px;
-      font-size: 0.9rem;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      box-shadow: 0 18px 55px rgba(0,0,0,0.45);
+      display: none;
+      animation: toastIn 0.2s ease;
+    }
+    @keyframes toastIn {
+      from { opacity: 0; transform: translateX(-50%) translateY(6px); }
+      to { opacity: 1; transform: translateX(-50%) translateY(0); }
     }
     .message.success { background: rgba(63, 185, 80, 0.15); color: var(--success); }
     .message.error { background: rgba(248, 81, 73, 0.15); color: var(--error); }
@@ -312,6 +348,36 @@
       gap: 0.35rem;
     }
     .prefs-saved::before { content: "✓"; font-weight: 700; }
+
+    /* Skeleton loading (premium shimmer placeholders) */
+    .skeleton-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 0.75rem;
+    }
+    .skeleton-box {
+      border-radius: 8px;
+      border: 1px solid rgba(45, 58, 77, 0.85);
+      background: rgba(255,255,255,0.03);
+      padding: 0.6rem 0.75rem;
+    }
+    .skeleton-line {
+      height: 12px;
+      border-radius: 999px;
+      background: linear-gradient(
+        90deg,
+        rgba(230, 237, 243, 0.06) 25%,
+        rgba(230, 237, 243, 0.12) 37%,
+        rgba(230, 237, 243, 0.06) 63%
+      );
+      background-size: 200% 100%;
+      animation: skeletonShimmer 1.25s ease-in-out infinite;
+      margin-bottom: 0.45rem;
+    }
+    @keyframes skeletonShimmer {
+      0% { background-position: 0% 0%; }
+      100% { background-position: 200% 0%; }
+    }
     .mode-tabs {
       display: flex;
       gap: 0;
@@ -474,7 +540,10 @@
   <div class="container">
     <header class="header">
       <h1>PulsePlate</h1>
-      <p class="tagline">Your pulse → perfect plate. Daily or weekly batch plans from your Oura data.</p>
+      <p class="tagline">
+        Your <span class="tagline-emph">pulse</span> → <span class="tagline-emph">perfect plate</span>.
+        Daily or weekly batch plans from your Oura data.
+      </p>
     </header>
 
     <!-- Onboarding: how it works + privacy (collapsed when connected) -->
@@ -669,6 +738,7 @@
     let planMode = 'daily';
     let lastGroceryList = [];
     let lastPlan = null;
+    let toastTimer = null;
 
     function setPlanMode(mode) {
       planMode = mode;
@@ -684,11 +754,15 @@
     modeWeekly.addEventListener('click', () => setPlanMode('weekly'));
 
     function showMessage(text, type) {
+      if (toastTimer) clearTimeout(toastTimer);
       messageEl.textContent = text;
       messageEl.className = 'message ' + (type || '');
       messageEl.style.display = 'block';
+      toastTimer = setTimeout(() => hideMessage(), 3600);
     }
     function hideMessage() {
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = null;
       messageEl.style.display = 'none';
     }
 
@@ -742,8 +816,31 @@
     }
 
     async function loadBiometrics() {
-      biometricsContent.innerHTML = '<span class="loading-inline">Loading…</span>';
       biometricsActions.style.display = 'none';
+      biometricsContent.innerHTML = `
+        <div class="skeleton-grid">
+          <div class="skeleton-box">
+            <div class="skeleton-line" style="width:55%"></div>
+            <div class="skeleton-line" style="width:78%"></div>
+          </div>
+          <div class="skeleton-box">
+            <div class="skeleton-line" style="width:52%"></div>
+            <div class="skeleton-line" style="width:74%"></div>
+          </div>
+          <div class="skeleton-box">
+            <div class="skeleton-line" style="width:45%"></div>
+            <div class="skeleton-line" style="width:80%"></div>
+          </div>
+          <div class="skeleton-box">
+            <div class="skeleton-line" style="width:60%"></div>
+            <div class="skeleton-line" style="width:70%"></div>
+          </div>
+          <div class="skeleton-box">
+            <div class="skeleton-line" style="width:55%"></div>
+            <div class="skeleton-line" style="width:68%"></div>
+          </div>
+        </div>
+      `;
       biometricsContent.classList.remove('error');
       try {
         const r = await fetch('/biometrics/oura', { credentials: 'include' });
@@ -1201,6 +1298,84 @@
       }
     });
 
+    function renderPlanLoading(isWeekly) {
+      // Premium skeleton placeholders while the API request runs.
+      planResult.classList.add('visible');
+      copyGroceryWrap.style.display = 'none';
+      planMeta.textContent = '';
+      planMeta.style.display = 'none';
+      planSummary.textContent = isWeekly ? 'Generating weekly meal prep…' : 'Generating your meal plan…';
+
+      if (isWeekly) {
+        planMealsWrap.style.display = 'none';
+        planWeeklyWrap.style.display = 'block';
+        planWeeklyWrap.innerHTML = `
+          <div class="day-block">
+            <h4 style="margin-bottom: 0.55rem;">
+              <span class="skeleton-line" style="display:inline-block; width:52%; margin:0;"></span>
+            </h4>
+            <div class="skeleton-box">
+              <div class="skeleton-line" style="width:65%;"></div>
+              <div class="skeleton-line" style="width:85%;"></div>
+              <div class="skeleton-line" style="width:78%; margin-bottom: 0;"></div>
+            </div>
+          </div>
+          <div class="day-block">
+            <h4 style="margin-bottom: 0.55rem;">
+              <span class="skeleton-line" style="display:inline-block; width:48%; margin:0;"></span>
+            </h4>
+            <div class="skeleton-box">
+              <div class="skeleton-line" style="width:62%;"></div>
+              <div class="skeleton-line" style="width:78%;"></div>
+              <div class="skeleton-line" style="width:70%; margin-bottom: 0;"></div>
+            </div>
+          </div>
+        `;
+
+        planGrocery.innerHTML = '<h3>Grocery list (weekly)</h3>';
+        const groceryBox = document.createElement('div');
+        groceryBox.className = 'skeleton-box';
+        groceryBox.innerHTML = `
+          <div class="skeleton-line" style="width:72%;"></div>
+          <div class="skeleton-line" style="width:88%;"></div>
+          <div class="skeleton-line" style="width:66%;"></div>
+          <div class="skeleton-line" style="width:80%; margin-bottom: 0;"></div>
+        `;
+        planGrocery.appendChild(groceryBox);
+      } else {
+        planWeeklyWrap.style.display = 'none';
+        planMealsWrap.style.display = 'block';
+        planMeals.innerHTML = `
+          <div class="meal">
+            <div class="skeleton-line" style="width:35%;"></div>
+            <div class="skeleton-line" style="width:76%;"></div>
+            <div class="skeleton-line" style="width:90%; margin-bottom: 0;"></div>
+          </div>
+          <div class="meal">
+            <div class="skeleton-line" style="width:40%;"></div>
+            <div class="skeleton-line" style="width:70%;"></div>
+            <div class="skeleton-line" style="width:85%; margin-bottom: 0;"></div>
+          </div>
+          <div class="meal">
+            <div class="skeleton-line" style="width:45%;"></div>
+            <div class="skeleton-line" style="width:78%;"></div>
+            <div class="skeleton-line" style="width:88%; margin-bottom: 0;"></div>
+          </div>
+        `;
+
+        planGrocery.innerHTML = '<h3>Grocery list</h3>';
+        const groceryBox = document.createElement('div');
+        groceryBox.className = 'skeleton-box';
+        groceryBox.innerHTML = `
+          <div class="skeleton-line" style="width:70%;"></div>
+          <div class="skeleton-line" style="width:85%;"></div>
+          <div class="skeleton-line" style="width:65%;"></div>
+          <div class="skeleton-line" style="width:80%; margin-bottom: 0;"></div>
+        `;
+        planGrocery.appendChild(groceryBox);
+      }
+    }
+
     getPlanBtn.addEventListener('click', async () => {
       hideMessage();
       getPlanBtn.disabled = true;
@@ -1209,6 +1384,7 @@
       getPlanBtn.innerHTML = '<span class="spinner"></span> ' + (isWeekly ? 'Generating weekly plan…' : 'Generating…');
       const url = '/generate-meal-plan/from-oura' + (isWeekly ? '?weekly_prep=true&weekly_days=' + days : '');
       try {
+        renderPlanLoading(isWeekly);
         // Preflight: ensure the backend is ready to call Grok (prevents confusing mid-request failures).
         try {
           const readyResp = await fetch('/health/ready', { method: 'GET' });
