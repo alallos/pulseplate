@@ -305,6 +305,13 @@
       flex-wrap: wrap;
       gap: 0.5rem;
     }
+    .onboarding-body { overflow: hidden; transition: opacity 0.2s ease; }
+    .onboarding-body.collapsed { display: none; }
+    .onboarding-body ul { margin: 0.5rem 0 1rem 1.25rem; padding: 0; }
+    .onboarding-body li { margin-bottom: 0.35rem; }
+    .onboarding-body h3 { font-size: 0.9rem; font-weight: 600; margin: 1rem 0 0.4rem 0; color: var(--muted); }
+    .onboarding-body h3:first-child { margin-top: 0; }
+    .onboarding-body p { margin: 0 0 0.5rem 0; font-size: 0.9rem; color: var(--muted); }
     .history-card-header {
       display: flex;
       align-items: center;
@@ -393,6 +400,26 @@
       <h1>PulsePlate</h1>
       <p class="tagline">Your pulse → perfect plate. Daily or weekly batch plans from your Oura data.</p>
     </header>
+
+    <!-- Onboarding: how it works + privacy (collapsed when connected) -->
+    <div id="onboardingCard" class="card">
+      <h2 style="margin-bottom: 0;">
+        How PulsePlate works
+        <button type="button" class="toggle" id="onboardingToggle" aria-expanded="true">Hide</button>
+      </h2>
+      <div id="onboardingBody" class="onboarding-body">
+        <h3>How it works</h3>
+        <ul>
+          <li><strong>Connect Oura</strong> — We use your ring’s sleep, recovery, and activity data (with your permission).</li>
+          <li><strong>Set preferences</strong> — Diet style, calorie target, goals, and allergies shape your plans.</li>
+          <li><strong>Get your plan</strong> — AI generates a daily or weekly meal plan and grocery list tailored to your recovery.</li>
+        </ul>
+        <h3>What we store</h3>
+        <p>We store your Oura tokens (to fetch your data), your saved preferences, and your generated meal plans so you can revisit them. We do not sell your data.</p>
+        <h3>Your control</h3>
+        <p>You can <strong>Disconnect Oura</strong> or <strong>Delete my data</strong> anytime from the connection area below (once connected). Disconnecting removes our access to Oura; deleting removes all stored plans and preferences.</p>
+      </div>
+    </div>
 
     <!-- Connection -->
     <div class="card">
@@ -548,6 +575,9 @@
     const historyCard = document.getElementById('historyCard');
     const historyList = document.getElementById('historyList');
     const historyEmpty = document.getElementById('historyEmpty');
+    const onboardingCard = document.getElementById('onboardingCard');
+    const onboardingBody = document.getElementById('onboardingBody');
+    const onboardingToggle = document.getElementById('onboardingToggle');
     const copyGroceryWrap = document.getElementById('copyGroceryWrap');
     const copyGroceryBtn = document.getElementById('copyGroceryBtn');
     const copyFullPlanBtn = document.getElementById('copyFullPlanBtn');
@@ -597,6 +627,9 @@
           biometricsCard.style.display = 'block';
           prefsCard.style.display = 'block';
           historyCard.style.display = 'block';
+          onboardingBody.classList.add('collapsed');
+          onboardingToggle.textContent = 'Show';
+          onboardingToggle.setAttribute('aria-expanded', 'false');
           loadBiometrics();
           loadPreferences();
           loadHistory();
@@ -610,6 +643,9 @@
           biometricsCard.style.display = 'none';
           prefsCard.style.display = 'none';
           historyCard.style.display = 'none';
+          onboardingBody.classList.remove('collapsed');
+          onboardingToggle.textContent = 'Hide';
+          onboardingToggle.setAttribute('aria-expanded', 'true');
         }
       } catch (_) {
         statusEl.textContent = 'Connect your Oura account to get personalized meal plans.';
@@ -662,6 +698,11 @@
       const collapsed = prefsBody.classList.toggle('collapsed');
       prefsToggle.textContent = collapsed ? 'Show' : 'Hide';
       prefsToggle.setAttribute('aria-expanded', !collapsed);
+    });
+    onboardingToggle.addEventListener('click', () => {
+      const collapsed = onboardingBody.classList.toggle('collapsed');
+      onboardingToggle.textContent = collapsed ? 'Show' : 'Hide';
+      onboardingToggle.setAttribute('aria-expanded', !collapsed);
     });
 
     async function loadPreferences() {
