@@ -537,6 +537,33 @@
       color: var(--muted);
       margin-top: 0.25rem;
     }
+    .history-empty-state {
+      text-align: center;
+      padding: 1.5rem 0.75rem;
+      border-radius: 8px;
+      border: 1px dashed var(--border);
+      background: rgba(255,255,255,0.02);
+    }
+    .history-empty-icon {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 0.75rem;
+      opacity: 0.6;
+    }
+    .history-empty-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text);
+      margin: 0 0 0.35rem 0;
+    }
+    .history-empty-desc {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin: 0;
+      max-width: 28ch;
+      margin-left: auto;
+      margin-right: auto;
+    }
     .history-item {
       display: flex;
       justify-content: space-between;
@@ -719,7 +746,13 @@
         <span style="font-size: 0.78rem; color: var(--muted);" id="historyHint">Tap to reopen</span>
       </div>
       <div id="historyBody">
-        <p class="history-empty" id="historyEmpty">No plans yet. Generate your first plan above.</p>
+        <div id="historyEmpty" class="history-empty-state">
+          <svg class="history-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+            <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/>
+          </svg>
+          <p class="history-empty-title">No plans yet</p>
+          <p class="history-empty-desc">Generate your first plan above and it’ll show up here for quick access.</p>
+        </div>
         <ul id="historyList" class="history-list"></ul>
       </div>
     </div>
@@ -993,7 +1026,8 @@
       try {
         const r = await fetch('/plans?limit=10', { credentials: 'include' });
         if (!r.ok) {
-          historyEmpty.textContent = 'No history yet.';
+          historyEmpty.innerHTML = '<p class="history-empty-desc">No history yet.</p>';
+          historyEmpty.style.display = 'block';
           historyList.innerHTML = '';
           return;
         }
@@ -1034,7 +1068,8 @@
           historyList.appendChild(li);
         });
       } catch (_) {
-        historyEmpty.textContent = 'Could not load history.';
+        historyEmpty.innerHTML = '<p class="history-empty-desc">Could not load history.</p>';
+        historyEmpty.style.display = 'block';
         historyList.innerHTML = '';
       }
     }

@@ -7,6 +7,7 @@ Turns Oura/Apple Watch data into zero-decision meal plans + grocery lists.
 import logging
 import os
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Union
@@ -96,6 +97,15 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 limiter = Limiter(key_func=get_remote_address)
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup: init DB. Shutdown: optional cleanup."""
+    init_db()
+    log.info("PulsePlate startup complete")
+    yield
+    # Shutdown: nothing to close for SQLite/Postgres per-request pattern
+
+
 app = FastAPI(
     title="PulsePlate",
     description=(
@@ -105,6 +115,7 @@ app = FastAPI(
     version="0.1.0-dev",
     docs_url="/docs",    # Swagger UI
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 app.state.limiter = limiter
@@ -112,13 +123,6 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
-
-
-@app.on_event("startup")
-async def startup() -> None:
-    """Ensure SQLite DB and tables exist."""
-    init_db()
-    log.info("PulsePlate startup complete")
 
 
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
