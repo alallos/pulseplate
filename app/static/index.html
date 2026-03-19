@@ -442,6 +442,40 @@
     }
     .footer-links a:hover { text-decoration: underline; }
 
+    .webhook-events-wrap {
+      margin-top: 0.4rem;
+    }
+    .webhook-events-title {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin: 0 0 0.35rem 0;
+      font-weight: 600;
+    }
+    .webhook-events-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .webhook-event-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 0.75rem;
+      padding: 0.25rem 0.35rem;
+      border: 1px solid rgba(45,58,77,0.45);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.02);
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+    .webhook-event-item .etype {
+      color: var(--text);
+      font-weight: 650;
+    }
+
     /* Skeleton loading (premium shimmer placeholders) */
     .skeleton-grid {
       display: grid;
@@ -694,6 +728,10 @@
     <div class="card">
       <div id="status" class="status loading">Checking Oura connection…</div>
       <div id="webhookStatus" class="status loading" style="display: none; margin-bottom: 0.75rem;">Webhook: checking…</div>
+      <div id="webhookEventsWrap" class="webhook-events-wrap" style="display: none;">
+        <div class="webhook-events-title">Recent webhook events</div>
+        <ul id="webhookEventsList" class="webhook-events-list"></ul>
+      </div>
       <a id="connectBtn" href="/auth/oura/authorize" class="button" style="display: none;">Connect Oura</a>
       <div id="actions" style="display: none;">
         <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom: 0.75rem;">
@@ -827,6 +865,8 @@
   <script>
     const statusEl = document.getElementById('status');
     const webhookStatusEl = document.getElementById('webhookStatus');
+    const webhookEventsWrap = document.getElementById('webhookEventsWrap');
+    const webhookEventsList = document.getElementById('webhookEventsList');
     const connectBtn = document.getElementById('connectBtn');
     const actionsEl = document.getElementById('actions');
     const getPlanBtn = document.getElementById('getPlanBtn');
@@ -923,26 +963,33 @@
         if (!r.ok) {
           if (r.status === 401) {
             webhookStatusEl.style.display = 'none';
+            if (webhookEventsWrap) webhookEventsWrap.style.display = 'none';
             return;
           }
           webhookStatusEl.classList.remove('loading');
           webhookStatusEl.classList.add('error');
           webhookStatusEl.textContent = 'Webhook: unavailable';
+          if (webhookEventsWrap) webhookEventsWrap.style.display = 'none';
           return;
         }
+
         const data = await r.json();
         if (!data.connected) {
           webhookStatusEl.classList.remove('loading');
           webhookStatusEl.classList.add('error');
           webhookStatusEl.textContent = 'Webhook: not connected';
+          if (webhookEventsWrap) webhookEventsWrap.style.display = 'none';
           return;
         }
+
         const lastAt = data.last_event_at;
         const lastType = data.last_event_type ? (' (' + data.last_event_type + ')') : '';
+
         if (!lastAt) {
           webhookStatusEl.classList.remove('loading');
           webhookStatusEl.classList.add('loading');
           webhookStatusEl.textContent = 'Webhook connected' + lastType + ' · waiting for first event';
+          await loadWebhookEvents();
           return;
         }
 
@@ -952,6 +999,7 @@
           webhookStatusEl.classList.remove('loading');
           webhookStatusEl.classList.add('connected');
           webhookStatusEl.textContent = 'Webhook received' + lastType;
+          await loadWebhookEvents();
           return;
         }
 
@@ -959,10 +1007,42 @@
         webhookStatusEl.classList.remove('loading', 'error', 'connected');
         webhookStatusEl.classList.add(isActive ? 'connected' : 'error');
         webhookStatusEl.textContent = (isActive ? 'Webhook active' : 'Webhook inactive') + lastType + ' · ' + ageMin + ' min ago';
+        await loadWebhookEvents();
       } catch (_) {
         webhookStatusEl.classList.remove('loading');
         webhookStatusEl.classList.add('error');
         webhookStatusEl.textContent = 'Webhook: unavailable';
+        if (webhookEventsWrap) webhookEventsWrap.style.display = 'none';
+      }
+    }
+
+    async function loadWebhookEvents() {
+      if (!webhookEventsWrap || !webhookEventsList) return;
+      try {
+        const r = await fetch('/webhooks/oura/events?limit=5', { credentials: 'include' });
+        if (!r.ok) {
+          webhookEventsWrap.style.display = 'none';
+          return;
+        }
+        const data = await r.json();
+        const events = Array.isArray(data.events) ? data.events : [];
+        webhookEventsList.innerHTML = '';
+        if (!events.length) {
+          webhookEventsList.innerHTML = '<li style="color: var(--muted); font-size: 0.85rem; padding: 0.25rem 0.35rem;">No webhook events yet.</li>';
+          webhookEventsWrap.style.display = 'block';
+          return;
+        }
+        events.forEach(ev => {
+          const li = document.createElement('li');
+          li.className = 'webhook-event-item';
+          const et = ev.event_type ? String(ev.event_type) : 'event';
+          const ts = ev.received_at ? String(ev.received_at) : '';
+          li.innerHTML = '<span class="etype">' + et + '</span><span style="color: var(--muted); font-size: 0.82rem;">' + ts + '</span>';
+          webhookEventsList.appendChild(li);
+        });
+        webhookEventsWrap.style.display = 'block';
+      } catch (_) {
+        webhookEventsWrap.style.display = 'none';
       }
     }
 

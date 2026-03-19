@@ -326,6 +326,11 @@ def test_webhook_status_requires_auth(client):
     assert response.status_code == 401
 
 
+def test_webhook_events_requires_auth(client):
+    response = client.get("/webhooks/oura/events?limit=5")
+    assert response.status_code == 401
+
+
 @patch("app.main.get_oura_tokens")
 @patch("app.main.get_latest_oura_webhook_event_for_user")
 def test_webhook_status_returns_latest_event(mock_latest, mock_tokens, auth_headers, client):
@@ -337,6 +342,20 @@ def test_webhook_status_returns_latest_event(mock_latest, mock_tokens, auth_head
     assert data["connected"] is True
     assert data["last_event_at"] == "2026-01-01T00:00:00Z"
     assert data["last_event_type"] == "sleep"
+
+
+@patch("app.main.get_recent_oura_webhook_events_for_user")
+def test_webhook_events_returns_recent(mock_recent, auth_headers, client):
+    mock_recent.return_value = [
+        {"event_type": "sleep", "received_at": "2026-01-01T00:00:00Z"},
+        {"event_type": "readiness", "received_at": "2026-01-01T01:00:00Z"},
+    ]
+    response = client.get("/webhooks/oura/events?limit=5", headers=auth_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert "events" in data
+    assert len(data["events"]) == 2
+    assert data["events"][0]["event_type"] == "sleep"
 
 
 @patch("app.main.save_oura_webhook_event")

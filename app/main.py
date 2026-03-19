@@ -57,6 +57,7 @@ from app.db import (
     get_plan_by_id,
     get_oura_tokens,
     get_latest_oura_webhook_event_for_user,
+    get_recent_oura_webhook_events_for_user,
 )
 
 # Load environment variables early (even if .env is empty for now)
@@ -277,6 +278,16 @@ async def oura_webhook_status(user_id: CurrentUserId):
         "last_event_at": (event or {}).get("received_at"),
         "last_event_type": (event or {}).get("event_type"),
     }
+
+
+@app.get("/webhooks/oura/events", summary="Recent Oura webhook events (for this user)")
+async def oura_webhook_events(
+    user_id: CurrentUserId,
+    limit: int = Query(5, ge=1, le=20, description="Number of recent events to return"),
+):
+    """Return the most recent stored webhook events for this user (debug/verification)."""
+    events = get_recent_oura_webhook_events_for_user(user_id, limit=limit)
+    return {"events": events}
 
 
 # --- Oura OAuth ---

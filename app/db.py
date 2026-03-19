@@ -215,6 +215,48 @@ def get_latest_oura_webhook_event_for_user(user_id: int) -> dict[str, Any] | Non
     }
 
 
+def get_recent_oura_webhook_events_for_user(user_id: int, limit: int = 5) -> list[dict[str, Any]]:
+    """
+    Return the most recent stored Oura webhook events for this PulsePlate user.
+
+    This is primarily for debugging/verification so users can confirm webhooks are arriving.
+    """
+    oura_user_id = get_user_oura_user_id(user_id)
+    if not oura_user_id:
+        return []
+
+    with _get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            _q(
+                """
+                SELECT event_type, received_at
+                FROM oura_webhook_events
+                WHERE oura_user_id = ?
+                ORDER BY received_at DESC
+                LIMIT ?
+                """
+            ),
+            (oura_user_id, limit),
+        )
+        rows = cur.fetchall() or []
+
+    events: list[dict[str, Any]] = []
+    for row in rows:
+        event_type = row[0] if len(row) > 0 else None
+        received_at = row[1] if len(row) > 1 else None
+        received_at_str = None
+        if received_at is not None:
+            received_at_str = (
+                received_at.isoformat().replace("+00:00", "Z")
+                if hasattr(received_at, "isoformat")
+                else str(received_at)
+            )
+        events.append({"event_type": event_type, "received_at": received_at_str})
+
+    return events
+
+
 def get_or_create_user_by_email(email: str) -> int:
     """Return user id for the given email. Creates user if not found."""
     if not (email or "").strip():
