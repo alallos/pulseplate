@@ -58,6 +58,8 @@ from app.db import (
     get_oura_tokens,
     get_latest_oura_webhook_event_for_user,
     get_recent_oura_webhook_events_for_user,
+    get_recent_oura_webhook_events,
+    get_user_oura_user_id,
 )
 
 # Load environment variables early (even if .env is empty for now)
@@ -288,6 +290,27 @@ async def oura_webhook_events(
     """Return the most recent stored webhook events for this user (debug/verification)."""
     events = get_recent_oura_webhook_events_for_user(user_id, limit=limit)
     return {"events": events}
+
+
+@app.get(
+    "/webhooks/oura/debug",
+    summary="Debug: Oura webhook user id + most recent events (all users)",
+    include_in_schema=False,
+)
+async def oura_webhook_debug(user_id: CurrentUserId, limit: int = Query(20, ge=1, le=50)):
+    """
+    Troubleshooting endpoint:
+    - returns the connected user's stored `oura_user_id`
+    - returns the most recent webhook events across all users
+
+    Useful when webhook status shows connected but no events.
+    """
+    stored_oura_user_id = get_user_oura_user_id(user_id)
+    recent_all = get_recent_oura_webhook_events(limit=limit)
+    return {
+        "connected_user_oura_user_id": stored_oura_user_id,
+        "recent_events_all_users": recent_all,
+    }
 
 
 # --- Oura OAuth ---

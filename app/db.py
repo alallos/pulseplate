@@ -268,6 +268,49 @@ def get_recent_oura_webhook_events_for_user(user_id: int, limit: int = 5) -> lis
     return events
 
 
+def get_recent_oura_webhook_events(limit: int = 20) -> list[dict[str, Any]]:
+    """
+    Return the most recent Oura webhook events across all stored users.
+    Intended for troubleshooting webhook delivery/extraction.
+    """
+    with _get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            _q(
+                """
+                SELECT oura_user_id, event_type, received_at
+                FROM oura_webhook_events
+                ORDER BY received_at DESC
+                LIMIT ?
+                """
+            ),
+            (limit,),
+        )
+        rows = cur.fetchall() or []
+
+    events: list[dict[str, Any]] = []
+    for row in rows:
+        oura_user_id = row[0] if len(row) > 0 else None
+        event_type = row[1] if len(row) > 1 else None
+        received_at = row[2] if len(row) > 2 else None
+        received_at_str = None
+        if received_at is not None:
+            received_at_str = (
+                received_at.isoformat().replace("+00:00", "Z")
+                if hasattr(received_at, "isoformat")
+                else str(received_at)
+            )
+        events.append(
+            {
+                "oura_user_id": oura_user_id,
+                "event_type": event_type,
+                "received_at": received_at_str,
+            }
+        )
+
+    return events
+
+
 def get_or_create_user_by_email(email: str) -> int:
     """Return user id for the given email. Creates user if not found."""
     if not (email or "").strip():

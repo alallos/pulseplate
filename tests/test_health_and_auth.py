@@ -358,6 +358,28 @@ def test_webhook_events_returns_recent(mock_recent, auth_headers, client):
     assert data["events"][0]["event_type"] == "sleep"
 
 
+def test_webhook_debug_requires_auth(client):
+    response = client.get("/webhooks/oura/debug")
+    assert response.status_code == 401
+
+
+@patch("app.main.get_user_oura_user_id")
+@patch("app.main.get_recent_oura_webhook_events")
+def test_webhook_debug_returns_stored_user_id_and_recent_events(
+    mock_recent_all, mock_user_oura_id, auth_headers, client
+):
+    mock_user_oura_id.return_value = "oura-user-123"
+    mock_recent_all.return_value = [
+        {"oura_user_id": "oura-user-123", "event_type": "sleep", "received_at": "2026-01-01T00:00:00Z"},
+        {"oura_user_id": None, "event_type": "readiness", "received_at": "2026-01-01T01:00:00Z"},
+    ]
+    response = client.get("/webhooks/oura/debug", headers=auth_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["connected_user_oura_user_id"] == "oura-user-123"
+    assert len(data["recent_events_all_users"]) == 2
+
+
 @patch("app.main.save_oura_webhook_event")
 def test_oura_webhook_accepts_json_and_persists(mock_save, client):
     payload = {"owner_id": "oura-user-123", "type": "sleep", "data": {"score": 80}}
