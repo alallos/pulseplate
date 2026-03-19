@@ -39,6 +39,38 @@ def _q(sql: str) -> str:
     return sql.replace("?", "%s") if _use_pg else sql
 
 
+def _ensure_oura_webhook_events_table() -> None:
+    """Create Oura webhook events table if missing (safe to call repeatedly)."""
+    with _get_conn() as conn:
+        cur = conn.cursor()
+        if _use_pg:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS oura_webhook_events (
+                    id SERIAL PRIMARY KEY,
+                    oura_user_id TEXT,
+                    event_type TEXT,
+                    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    payload_json TEXT NOT NULL
+                )
+            """)
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS idx_oura_webhook_events_user_id ON oura_webhook_events(oura_user_id)"
+            )
+        else:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS oura_webhook_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    oura_user_id TEXT,
+                    event_type TEXT,
+                    received_at TEXT NOT NULL,
+                    payload_json TEXT NOT NULL
+                )
+            """)
+            cur.execute(
+                "CREATE INDEX IF NOT EXISTS idx_oura_webhook_events_user_id ON oura_webhook_events(oura_user_id)"
+            )
+
+
 def init_db() -> None:
     """Create users and plans tables if they do not exist. Safe to call on every startup."""
     with _get_conn() as conn:
@@ -219,7 +251,11 @@ def get_latest_oura_webhook_event_for_user(user_id: int) -> dict[str, Any] | Non
             "received_at": received_at_str,
         }
     except Exception:
-        # If webhook-events table doesn't exist yet, treat as no events.
+        # If webhook-events table doesn't exist yet, create it and treat as no events.
+        try:
+            _ensure_oura_webhook_events_table()
+        except Exception:
+            pass
         return None
 
 
@@ -250,6 +286,10 @@ def get_recent_oura_webhook_events_for_user(user_id: int, limit: int = 5) -> lis
             )
             rows = cur.fetchall() or []
     except Exception:
+        try:
+            _ensure_oura_webhook_events_table()
+        except Exception:
+            pass
         return []
 
     events: list[dict[str, Any]] = []
@@ -289,6 +329,10 @@ def get_recent_oura_webhook_events(limit: int = 20) -> list[dict[str, Any]]:
             )
             rows = cur.fetchall() or []
     except Exception:
+        try:
+            _ensure_oura_webhook_events_table()
+        except Exception:
+            pass
         return []
 
     events: list[dict[str, Any]] = []
@@ -404,24 +448,46 @@ def save_oura_webhook_event(
     """Persist a received Oura webhook payload for debugging + future processing."""
     received_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     payload_json = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
-    with _get_conn() as conn:
-        cur = conn.cursor()
-        if _use_pg:
-            cur.execute(
-                _q("""
-                    INSERT INTO oura_webhook_events (oura_user_id, event_type, payload_json)
-                    VALUES (?, ?, ?)
-                """),
-                (oura_user_id, event_type, payload_json),
-            )
-        else:
-            cur.execute(
-                _q("""
-                    INSERT INTO oura_webhook_events (oura_user_id, event_type, received_at, payload_json)
-                    VALUES (?, ?, ?, ?)
-                """),
-                (oura_user_id, event_type, received_at, payload_json),
-            )
+    try:
+        with _get_conn() as conn:
+            cur = conn.cursor()
+            if _use_pg:
+                cur.execute(
+                    _q("""
+                        INSERT INTO oura_webhook_events (oura_user_id, event_type, payload_json)
+                        VALUES (?, ?, ?)
+                    """),
+                    (oura_user_id, event_type, payload_json),
+                )
+            else:
+                cur.execute(
+                    _q("""
+                        INSERT INTO oura_webhook_events (oura_user_id, event_type, received_at, payload_json)
+                        VALUES (?, ?, ?, ?)
+                    """),
+                    (oura_user_id, event_type, received_at, payload_json),
+                )
+    except Exception:
+        # If schema is behind (missing table), create and retry once.
+        _ensure_oura_webhook_events_table()
+        with _get_conn() as conn:
+            cur = conn.cursor()
+            if _use_pg:
+                cur.execute(
+                    _q("""
+                        INSERT INTO oura_webhook_events (oura_user_id, event_type, payload_json)
+                        VALUES (?, ?, ?)
+                    """),
+                    (oura_user_id, event_type, payload_json),
+                )
+            else:
+                cur.execute(
+                    _q("""
+                        INSERT INTO oura_webhook_events (oura_user_id, event_type, received_at, payload_json)
+                        VALUES (?, ?, ?, ?)
+                    """),
+                    (oura_user_id, event_type, received_at, payload_json),
+                )
 
 
 def clear_oura_tokens(user_id: int) -> None:
