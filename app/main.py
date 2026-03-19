@@ -305,8 +305,15 @@ async def oura_webhook_debug(user_id: CurrentUserId, limit: int = Query(20, ge=1
 
     Useful when webhook status shows connected but no events.
     """
-    stored_oura_user_id = get_user_oura_user_id(user_id)
-    recent_all = get_recent_oura_webhook_events(limit=limit)
+    try:
+        stored_oura_user_id = get_user_oura_user_id(user_id)
+    except Exception:
+        stored_oura_user_id = None
+
+    try:
+        recent_all = get_recent_oura_webhook_events(limit=limit)
+    except Exception:
+        recent_all = []
     return {
         "connected_user_oura_user_id": stored_oura_user_id,
         "recent_events_all_users": recent_all,

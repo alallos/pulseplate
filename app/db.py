@@ -273,20 +273,23 @@ def get_recent_oura_webhook_events(limit: int = 20) -> list[dict[str, Any]]:
     Return the most recent Oura webhook events across all stored users.
     Intended for troubleshooting webhook delivery/extraction.
     """
-    with _get_conn() as conn:
-        cur = conn.cursor()
-        cur.execute(
-            _q(
-                """
-                SELECT oura_user_id, event_type, received_at
-                FROM oura_webhook_events
-                ORDER BY received_at DESC
-                LIMIT ?
-                """
-            ),
-            (limit,),
-        )
-        rows = cur.fetchall() or []
+    try:
+        with _get_conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                _q(
+                    """
+                    SELECT oura_user_id, event_type, received_at
+                    FROM oura_webhook_events
+                    ORDER BY received_at DESC
+                    LIMIT ?
+                    """
+                ),
+                (limit,),
+            )
+            rows = cur.fetchall() or []
+    except Exception:
+        return []
 
     events: list[dict[str, Any]] = []
     for row in rows:
