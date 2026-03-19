@@ -141,6 +141,24 @@ async def root():
     }
 
 
+@app.get("/about")
+async def about():
+    """Serve a shareable 'How it works' page."""
+    page = _STATIC_DIR / "about.html"
+    if page.exists():
+        return FileResponse(page)
+    raise HTTPException(status_code=404, detail="Not found")
+
+
+@app.get("/privacy")
+async def privacy():
+    """Serve privacy & deletion policy page."""
+    page = _STATIC_DIR / "privacy.html"
+    if page.exists():
+        return FileResponse(page)
+    raise HTTPException(status_code=404, detail="Not found")
+
+
 @app.get("/health")
 async def health():
     """Health check for monitoring / load balancers. Always returns 200 if the app is up."""

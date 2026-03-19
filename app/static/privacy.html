@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PulsePlate – Privacy & deletion</title>
+  <meta name="theme-color" content="#0f1419">
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: rgba(26, 35, 50, 0.72);
+      --border: #2d3a4d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background:
+        radial-gradient(1200px circle at 10% -10%, rgba(88, 166, 255, 0.18), transparent 45%),
+        radial-gradient(900px circle at 90% 0%, rgba(63, 185, 80, 0.10), transparent 40%),
+        radial-gradient(700px circle at 50% 110%, rgba(248, 81, 73, 0.06), transparent 45%),
+        var(--bg);
+      color: var(--text);
+      margin: 0;
+      line-height: 1.5;
+      min-height: 100vh;
+      padding: 2rem 1.25rem;
+    }
+    .wrap { max-width: 680px; margin: 0 auto; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    h1 {
+      margin: 0 0 0.75rem 0;
+      font-size: 1.4rem;
+      letter-spacing: -0.02em;
+    }
+    .muted { color: var(--muted); }
+    a { color: var(--accent); text-decoration: none; font-weight: 700; }
+    a:hover { text-decoration: underline; }
+    .back {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      align-items: center;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items:center;
+      gap:0.5rem;
+      padding:0.6rem 1rem;
+      border-radius:10px;
+      border: 1px solid rgba(45,58,77,0.9);
+      background: rgba(255,255,255,0.03);
+      font-weight: 800;
+      color: var(--text);
+      text-decoration: none;
+    }
+    h3 { margin-top: 1.2rem; margin-bottom: 0.5rem; }
+    ul { padding-left: 1.25rem; }
+    li { margin: 0.45rem 0; color: var(--muted); }
+    .policy-note {
+      font-size: 0.92rem;
+      color: var(--muted);
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="back">
+      <a class="btn" href="/">Back to app</a>
+      <div class="muted" style="font-size:0.85rem;">PulsePlate</div>
+    </div>
+
+    <div class="card">
+      <h1>Privacy & deletion</h1>
+      <p class="muted" style="margin-top:0;">
+        This is a short, plain-language summary. It is not legal advice.
+      </p>
+
+      <h3>What we store</h3>
+      <ul>
+        <li><strong>Oura access tokens</strong> (so we can fetch your biometrics).</li>
+        <li><strong>Your preferences</strong> (diet style, calorie target, goals, allergies, units).</li>
+        <li><strong>Your generated meal plans</strong> (so you can reopen them later).</li>
+      </ul>
+
+      <h3>What we don’t do</h3>
+      <ul>
+        <li>We do not sell your data.</li>
+        <li>We don’t show your personal data publicly.</li>
+      </ul>
+
+      <h3>Your control</h3>
+      <p class="muted" style="margin:0;">
+        You can disconnect Oura or delete your data from the app (buttons in the connection area).
+        Deleting removes your saved plans and your user record.
+      </p>
+
+      <h3>Security</h3>
+      <p class="muted policy-note">
+        Access is protected with a JWT session cookie after Oura connect. OAuth state is signed using your server secret.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+

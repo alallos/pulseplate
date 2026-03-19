@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PulsePlate – How it works</title>
+  <meta name="theme-color" content="#0f1419">
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: rgba(26, 35, 50, 0.72);
+      --border: #2d3a4d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --success: #3fb950;
+      --error: #f85149;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background:
+        radial-gradient(1200px circle at 10% -10%, rgba(88, 166, 255, 0.18), transparent 45%),
+        radial-gradient(900px circle at 90% 0%, rgba(63, 185, 80, 0.10), transparent 40%),
+        radial-gradient(700px circle at 50% 110%, rgba(248, 81, 73, 0.06), transparent 45%),
+        var(--bg);
+      color: var(--text);
+      margin: 0;
+      line-height: 1.5;
+      min-height: 100vh;
+      padding: 2rem 1.25rem;
+    }
+    .wrap { max-width: 620px; margin: 0 auto; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+    }
+    h1 {
+      margin: 0 0 0.75rem 0;
+      font-size: 1.4rem;
+      letter-spacing: -0.02em;
+    }
+    .muted { color: var(--muted); }
+    a { color: var(--accent); text-decoration: none; font-weight: 700; }
+    a:hover { text-decoration: underline; }
+    ul { padding-left: 1.25rem; }
+    li { margin: 0.45rem 0; color: var(--muted); }
+    .toplink { display:flex; justify-content: space-between; gap: 1rem; align-items:center; margin-bottom: 1rem; flex-wrap: wrap; }
+    .pill {
+      display: inline-flex;
+      align-items:center;
+      gap:0.45rem;
+      padding:0.35rem 0.65rem;
+      border-radius:999px;
+      border:1px solid rgba(45,58,77,0.9);
+      background: rgba(255,255,255,0.03);
+      color: var(--muted);
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .btn {
+      display: inline-flex;
+      align-items:center;
+      gap:0.5rem;
+      background: linear-gradient(135deg, rgba(88, 166, 255, 1), rgba(121, 184, 255, 1));
+      color: #fff;
+      border: none;
+      padding: 0.65rem 1rem;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 700;
+      box-shadow: 0 14px 34px rgba(88, 166, 255, 0.20);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="toplink">
+      <div class="pill">Your pulse → perfect plate</div>
+      <a class="btn" href="/auth/oura/authorize">Connect Oura</a>
+    </div>
+
+    <div class="card">
+      <h1>How PulsePlate works</h1>
+      <p class="muted" style="margin-top:0;">
+        PulsePlate turns your wearable signals into meal plans you can actually follow.
+        No spreadsheets. No guesswork. Just a plan shaped by your recovery and goals.
+      </p>
+
+      <h3 style="margin: 1.1rem 0 0.4rem 0;">The flow</h3>
+      <ul>
+        <li><strong>Connect Oura</strong> (OAuth) to read sleep, recovery, HRV, resting heart rate, and activity.</li>
+        <li><strong>Set preferences</strong> for diet style, calorie target, goals, allergies, and units.</li>
+        <li><strong>Generate your plan</strong> with AI for daily meals or a 5–7 day weekly batch.</li>
+      </ul>
+
+      <h3 style="margin: 1.1rem 0 0.4rem 0;">Privacy & control</h3>
+      <p class="muted" style="margin: 0;">
+        We store the minimum needed to deliver your plans (tokens, preferences, and plan history).
+        You can disconnect Oura or delete all your data anytime.
+      </p>
+      <p class="muted" style="margin: 0.75rem 0 0 0;">
+        See the <a href="/privacy">privacy & deletion policy</a> for details.
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+

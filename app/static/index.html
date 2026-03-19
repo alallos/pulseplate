@@ -411,6 +411,37 @@
     }
     .prefs-saved::before { content: "✓"; font-weight: 700; }
 
+    .privacy-inline {
+      margin-top: 0.5rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+    .privacy-inline a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .privacy-inline a:hover { text-decoration: underline; }
+
+    .footer-links {
+      margin-top: 1.25rem;
+      padding-top: 1.0rem;
+      border-top: 1px solid rgba(45, 58, 77, 0.6);
+      font-size: 0.82rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .footer-links a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .footer-links a:hover { text-decoration: underline; }
+
     /* Skeleton loading (premium shimmer placeholders) */
     .skeleton-grid {
       display: grid;
@@ -653,6 +684,9 @@
         <p>We store your Oura tokens (to fetch your data), your saved preferences, and your generated meal plans so you can revisit them. We do not sell your data.</p>
         <h3>Your control</h3>
         <p>You can <strong>Disconnect Oura</strong> or <strong>Delete my data</strong> anytime from the connection area below (once connected). Disconnecting removes our access to Oura; deleting removes all stored plans and preferences.</p>
+        <p class="privacy-inline">
+          For details, see <a href="/privacy">privacy & deletion policy</a>.
+        </p>
       </div>
     </div>
 
@@ -774,6 +808,14 @@
         <button type="button" class="secondary" id="copyFullPlanBtn">Copy full plan</button>
         <button type="button" class="secondary" id="shareFullPlanBtn">Share full plan</button>
         <button type="button" class="secondary" id="downloadFullPlanBtn">Download full plan .txt</button>
+      </div>
+    </div>
+
+    <div class="footer-links" role="contentinfo">
+      <div>PulsePlate is an AI meal planner using your Oura data.</div>
+      <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
+        <a href="/about">How it works</a>
+        <a href="/privacy">Privacy</a>
       </div>
     </div>
 
