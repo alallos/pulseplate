@@ -59,6 +59,7 @@ from app.db import (
     get_latest_oura_webhook_event_for_user,
     get_recent_oura_webhook_events_for_user,
     get_recent_oura_webhook_events,
+    get_oura_webhook_events_count_all_users,
     get_user_oura_user_id,
 )
 
@@ -252,6 +253,15 @@ async def oura_webhook(request: Request):
 
     oura_user_id = _extract_oura_user_id(payload)
     event_type = _extract_oura_event_type(payload)
+    # Log minimal diagnostics (avoid dumping full payload).
+    try:
+        log.info(
+            "Oura webhook received event_type=%s oura_user_id=%s",
+            event_type,
+            oura_user_id,
+        )
+    except Exception:
+        pass
 
     try:
         save_oura_webhook_event(
@@ -314,9 +324,15 @@ async def oura_webhook_debug(user_id: CurrentUserId, limit: int = Query(20, ge=1
         recent_all = get_recent_oura_webhook_events(limit=limit)
     except Exception:
         recent_all = []
+
+    try:
+        events_count_all = get_oura_webhook_events_count_all_users()
+    except Exception:
+        events_count_all = 0
     return {
         "connected_user_oura_user_id": stored_oura_user_id,
         "recent_events_all_users": recent_all,
+        "events_count_all_users": events_count_all,
     }
 
 

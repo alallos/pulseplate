@@ -358,6 +358,30 @@ def get_recent_oura_webhook_events(limit: int = 20) -> list[dict[str, Any]]:
     return events
 
 
+def get_oura_webhook_events_count_all_users() -> int:
+    """Return total number of stored Oura webhook events (all users)."""
+    try:
+        with _get_conn() as conn:
+            cur = conn.cursor()
+            cur.execute(_q("SELECT COUNT(*) FROM oura_webhook_events"))
+            row = cur.fetchone()
+        if not row:
+            return 0
+        return int(row[0] or 0)
+    except Exception:
+        try:
+            _ensure_oura_webhook_events_table()
+            with _get_conn() as conn:
+                cur = conn.cursor()
+                cur.execute(_q("SELECT COUNT(*) FROM oura_webhook_events"))
+                row = cur.fetchone()
+            if not row:
+                return 0
+            return int(row[0] or 0)
+        except Exception:
+            return 0
+
+
 def get_or_create_user_by_email(email: str) -> int:
     """Return user id for the given email. Creates user if not found."""
     if not (email or "").strip():

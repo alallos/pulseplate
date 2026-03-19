@@ -378,6 +378,7 @@ def test_webhook_debug_returns_stored_user_id_and_recent_events(
     data = response.json()
     assert data["connected_user_oura_user_id"] == "oura-user-123"
     assert len(data["recent_events_all_users"]) == 2
+    assert "events_count_all_users" in data
 
 
 @patch("app.main.save_oura_webhook_event")
