@@ -155,6 +155,66 @@ def get_oura_tokens(user_id: int = DEFAULT_USER_ID) -> dict[str, Any] | None:
     }
 
 
+def get_user_oura_user_id(user_id: int) -> str | None:
+    """Return the stored Oura user id for this PulsePlate user."""
+    with _get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(_q("SELECT oura_user_id FROM users WHERE id = ?"), (user_id,))
+        row = cur.fetchone()
+    if not row:
+        return None
+    # SQLite returns a Row; Postgres returns a tuple. Handle both.
+    val = row[0]
+    if val is None:
+        return None
+    s = str(val).strip()
+    return s or None
+
+
+def get_latest_oura_webhook_event_for_user(user_id: int) -> dict[str, Any] | None:
+    """
+    Return the most recent stored Oura webhook event for this user.
+
+    Note: webhook payloads are persisted for debugging and future processing.
+    """
+    oura_user_id = get_user_oura_user_id(user_id)
+    if not oura_user_id:
+        return None
+
+    with _get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            _q(
+                """
+                SELECT event_type, received_at
+                FROM oura_webhook_events
+                WHERE oura_user_id = ?
+                ORDER BY received_at DESC
+                LIMIT 1
+                """
+            ),
+            (oura_user_id,),
+        )
+        row = cur.fetchone()
+    if not row:
+        return None
+
+    event_type = row[0]
+    received_at = row[1] if len(row) > 1 else None
+    received_at_str = None
+    if received_at is not None:
+        received_at_str = (
+            received_at.isoformat().replace("+00:00", "Z")
+            if hasattr(received_at, "isoformat")
+            else str(received_at)
+        )
+
+    return {
+        "event_type": event_type,
+        "received_at": received_at_str,
+    }
+
+
 def get_or_create_user_by_email(email: str) -> int:
     """Return user id for the given email. Creates user if not found."""
     if not (email or "").strip():

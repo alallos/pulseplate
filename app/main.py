@@ -55,6 +55,8 @@ from app.db import (
     save_oura_webhook_event,
     get_plans,
     get_plan_by_id,
+    get_oura_tokens,
+    get_latest_oura_webhook_event_for_user,
 )
 
 # Load environment variables early (even if .env is empty for now)
@@ -259,6 +261,22 @@ async def oura_webhook(request: Request):
         log.exception("Failed to persist Oura webhook event")
 
     return {"status": "ok"}
+
+
+@app.get("/webhooks/oura/status", summary="Latest Oura webhook status (for this user)")
+async def oura_webhook_status(user_id: CurrentUserId):
+    """
+    Returns whether the user is connected to Oura and when the most recent webhook
+    event was received for this user.
+    """
+    tokens = get_oura_tokens(user_id)
+    connected = bool(tokens and tokens.get("access_token"))
+    event = get_latest_oura_webhook_event_for_user(user_id)
+    return {
+        "connected": connected,
+        "last_event_at": (event or {}).get("received_at"),
+        "last_event_type": (event or {}).get("event_type"),
+    }
 
 
 # --- Oura OAuth ---

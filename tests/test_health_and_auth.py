@@ -321,6 +321,24 @@ def test_public_pages_return_200(client, path):
     assert response.status_code == 200
 
 
+def test_webhook_status_requires_auth(client):
+    response = client.get("/webhooks/oura/status")
+    assert response.status_code == 401
+
+
+@patch("app.main.get_oura_tokens")
+@patch("app.main.get_latest_oura_webhook_event_for_user")
+def test_webhook_status_returns_latest_event(mock_latest, mock_tokens, auth_headers, client):
+    mock_tokens.return_value = {"access_token": "oura-access-token"}
+    mock_latest.return_value = {"received_at": "2026-01-01T00:00:00Z", "event_type": "sleep"}
+    response = client.get("/webhooks/oura/status", headers=auth_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["connected"] is True
+    assert data["last_event_at"] == "2026-01-01T00:00:00Z"
+    assert data["last_event_type"] == "sleep"
+
+
 @patch("app.main.save_oura_webhook_event")
 def test_oura_webhook_accepts_json_and_persists(mock_save, client):
     payload = {"owner_id": "oura-user-123", "type": "sleep", "data": {"score": 80}}

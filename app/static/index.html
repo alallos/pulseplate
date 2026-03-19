@@ -693,6 +693,7 @@
     <!-- Connection -->
     <div class="card">
       <div id="status" class="status loading">Checking Oura connection…</div>
+      <div id="webhookStatus" class="status loading" style="display: none; margin-bottom: 0.75rem;">Webhook: checking…</div>
       <a id="connectBtn" href="/auth/oura/authorize" class="button" style="display: none;">Connect Oura</a>
       <div id="actions" style="display: none;">
         <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom: 0.75rem;">
@@ -825,6 +826,7 @@
 
   <script>
     const statusEl = document.getElementById('status');
+    const webhookStatusEl = document.getElementById('webhookStatus');
     const connectBtn = document.getElementById('connectBtn');
     const actionsEl = document.getElementById('actions');
     const getPlanBtn = document.getElementById('getPlanBtn');
@@ -910,6 +912,60 @@
       return now.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
     }
 
+    async function loadWebhookStatus() {
+      if (!webhookStatusEl) return;
+      webhookStatusEl.style.display = 'inline-flex';
+      webhookStatusEl.classList.add('loading');
+      webhookStatusEl.classList.remove('connected', 'error');
+      webhookStatusEl.textContent = 'Webhook: checking…';
+      try {
+        const r = await fetch('/webhooks/oura/status', { credentials: 'include' });
+        if (!r.ok) {
+          if (r.status === 401) {
+            webhookStatusEl.style.display = 'none';
+            return;
+          }
+          webhookStatusEl.classList.remove('loading');
+          webhookStatusEl.classList.add('error');
+          webhookStatusEl.textContent = 'Webhook: unavailable';
+          return;
+        }
+        const data = await r.json();
+        if (!data.connected) {
+          webhookStatusEl.classList.remove('loading');
+          webhookStatusEl.classList.add('error');
+          webhookStatusEl.textContent = 'Webhook: not connected';
+          return;
+        }
+        const lastAt = data.last_event_at;
+        const lastType = data.last_event_type ? (' (' + data.last_event_type + ')') : '';
+        if (!lastAt) {
+          webhookStatusEl.classList.remove('loading');
+          webhookStatusEl.classList.add('loading');
+          webhookStatusEl.textContent = 'Webhook connected' + lastType + ' · waiting for first event';
+          return;
+        }
+
+        const dt = new Date(lastAt);
+        const ageMin = Math.round((Date.now() - dt.getTime()) / 60000);
+        if (Number.isNaN(ageMin)) {
+          webhookStatusEl.classList.remove('loading');
+          webhookStatusEl.classList.add('connected');
+          webhookStatusEl.textContent = 'Webhook received' + lastType;
+          return;
+        }
+
+        const isActive = ageMin <= 120;
+        webhookStatusEl.classList.remove('loading', 'error', 'connected');
+        webhookStatusEl.classList.add(isActive ? 'connected' : 'error');
+        webhookStatusEl.textContent = (isActive ? 'Webhook active' : 'Webhook inactive') + lastType + ' · ' + ageMin + ' min ago';
+      } catch (_) {
+        webhookStatusEl.classList.remove('loading');
+        webhookStatusEl.classList.add('error');
+        webhookStatusEl.textContent = 'Webhook: unavailable';
+      }
+    }
+
     async function checkConnection() {
       statusEl.classList.add('loading');
       statusEl.classList.remove('connected', 'error');
@@ -930,6 +986,7 @@
           loadBiometrics();
           loadPreferences();
           loadHistory();
+          loadWebhookStatus();
         } else {
           statusEl.textContent = (r.status === 401)
             ? 'Session expired or not connected. Connect Oura to continue.'
@@ -940,6 +997,7 @@
           biometricsCard.style.display = 'none';
           prefsCard.style.display = 'none';
           historyCard.style.display = 'none';
+          if (webhookStatusEl) webhookStatusEl.style.display = 'none';
           onboardingBody.classList.remove('collapsed');
           onboardingToggle.textContent = 'Hide';
           onboardingToggle.setAttribute('aria-expanded', 'true');
@@ -951,6 +1009,7 @@
         actionsEl.style.display = 'none';
         biometricsCard.style.display = 'none';
         prefsCard.style.display = 'none';
+        if (webhookStatusEl) webhookStatusEl.style.display = 'none';
       }
     }
 
