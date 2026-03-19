@@ -314,3 +314,27 @@ def test_delete_account_redirects_and_deletes_data(mock_delete_user_data, auth_h
     mock_delete_user_data.assert_called_once()
     assert "Set-Cookie" in response.headers or "set-cookie" in response.headers
 
+
+@pytest.mark.parametrize("path", ["/about", "/privacy", "/terms"])
+def test_public_pages_return_200(client, path):
+    response = client.get(path)
+    assert response.status_code == 200
+
+
+@patch("app.main.save_oura_webhook_event")
+def test_oura_webhook_accepts_json_and_persists(mock_save, client):
+    payload = {"owner_id": "oura-user-123", "type": "sleep", "data": {"score": 80}}
+    response = client.post("/webhooks/oura", json=payload)
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    mock_save.assert_called_once()
+
+
+def test_oura_webhook_rejects_invalid_json(client):
+    response = client.post(
+        "/webhooks/oura",
+        data="not-json",
+        headers={"Content-Type": "application/json"},
+    )
+    assert response.status_code == 400
+

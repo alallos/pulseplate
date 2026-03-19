@@ -52,6 +52,7 @@ from app.db import (
     clear_oura_tokens,
     delete_user_data,
     save_plan,
+    save_oura_webhook_event,
     get_plans,
     get_plan_by_id,
 )
@@ -159,6 +160,15 @@ async def privacy():
     raise HTTPException(status_code=404, detail="Not found")
 
 
+@app.get("/terms")
+async def terms():
+    """Serve terms of use page."""
+    page = _STATIC_DIR / "terms.html"
+    if page.exists():
+        return FileResponse(page)
+    raise HTTPException(status_code=404, detail="Not found")
+
+
 @app.get("/health")
 async def health():
     """Health check for monitoring / load balancers. Always returns 200 if the app is up."""
@@ -176,6 +186,79 @@ async def health_ready():
         log.warning("health_ready failed: GROK_API_KEY not set")
         raise HTTPException(status_code=503, detail="GROK_API_KEY not configured")
     return {"status": "ready", "message": "PulsePlate ready to generate meal plans"}
+
+
+def _extract_oura_user_id(payload: object) -> str | None:
+    """Best-effort extraction of an Oura user identifier from webhook payloads."""
+    if not isinstance(payload, dict):
+        return None
+
+    def _maybe_str(v: object) -> str | None:
+        return str(v) if v is not None and v != "" else None
+
+    # Common top-level keys seen in webhook payloads from various integrations.
+    for key in ("owner_id", "user_id", "oura_user_id", "userId"):
+        v = payload.get(key)
+        out = _maybe_str(v)
+        if out:
+            return out
+
+    # Nested shapes (best-effort)
+    data = payload.get("data")
+    if isinstance(data, dict):
+        for key in ("owner_id", "user_id", "oura_user_id", "userId"):
+            v = data.get(key)
+            out = _maybe_str(v)
+            if out:
+                return out
+
+    user = payload.get("user")
+    if isinstance(user, dict):
+        for key in ("id", "owner_id", "user_id"):
+            out = _maybe_str(user.get(key))
+            if out:
+                return out
+
+    return None
+
+
+def _extract_oura_event_type(payload: object) -> str | None:
+    """Best-effort extraction of event type/name for storage."""
+    if not isinstance(payload, dict):
+        return None
+    for key in ("type", "event_type", "event", "kind"):
+        v = payload.get(key)
+        if v:
+            return str(v)
+    return None
+
+
+@app.post("/webhooks/oura", include_in_schema=False)
+async def oura_webhook(request: Request):
+    """
+    Receiver endpoint for Oura webhooks.
+
+    Note: This implementation stores the raw webhook payload for debugging and future processing.
+    """
+    try:
+        payload = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    oura_user_id = _extract_oura_user_id(payload)
+    event_type = _extract_oura_event_type(payload)
+
+    try:
+        save_oura_webhook_event(
+            oura_user_id=oura_user_id,
+            event_type=event_type,
+            payload=payload if isinstance(payload, dict) else {"payload": payload},
+        )
+    except Exception:
+        # Never fail the webhook delivery due to our storage layer.
+        log.exception("Failed to persist Oura webhook event")
+
+    return {"status": "ok"}
 
 
 # --- Oura OAuth ---
@@ -231,6 +314,9 @@ async def oura_callback(
     email = (info.get("email") or info.get("id") or "unknown")
     if not isinstance(email, str):
         email = str(email)
+    oura_user_id = info.get("id")
+    if oura_user_id is not None:
+        oura_user_id = str(oura_user_id)
     try:
         user_id = get_or_create_user_by_email(email)
     except ValueError:
@@ -240,6 +326,7 @@ async def oura_callback(
         access_token,
         tokens.get("refresh_token"),
         tokens.get("expires_at", 0),
+        oura_user_id=oura_user_id,
     )
     jwt_token = create_session_token(user_id)
     response = RedirectResponse(url="/?oura=connected", status_code=302)

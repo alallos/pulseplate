@@ -74,6 +74,16 @@ def init_db() -> None:
             """)
             cur.execute("CREATE INDEX IF NOT EXISTS idx_plans_user_id ON plans(user_id)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_plans_generated_at ON plans(generated_at)")
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS oura_webhook_events (
+                    id SERIAL PRIMARY KEY,
+                    oura_user_id TEXT,
+                    event_type TEXT,
+                    received_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    payload_json TEXT NOT NULL
+                )
+            """)
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_oura_webhook_events_user_id ON oura_webhook_events(oura_user_id)")
             try:
                 cur.execute("ALTER TABLE users ADD COLUMN measurement_system TEXT DEFAULT 'us'")
             except Exception:
@@ -115,6 +125,16 @@ def init_db() -> None:
             """)
             cur.execute("CREATE INDEX IF NOT EXISTS idx_plans_user_id ON plans(user_id)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_plans_generated_at ON plans(generated_at)")
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS oura_webhook_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    oura_user_id TEXT,
+                    event_type TEXT,
+                    received_at TEXT NOT NULL,
+                    payload_json TEXT NOT NULL
+                )
+            """)
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_oura_webhook_events_user_id ON oura_webhook_events(oura_user_id)")
 
 
 def get_oura_tokens(user_id: int = DEFAULT_USER_ID) -> dict[str, Any] | None:
@@ -174,6 +194,7 @@ def set_oura_tokens(
     access_token: str,
     refresh_token: str | None,
     expires_at: int,
+    oura_user_id: str | None = None,
 ) -> None:
     """Store or update Oura tokens for the user."""
     now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -182,31 +203,65 @@ def set_oura_tokens(
         if _use_pg:
             cur.execute(
                 _q("""
-                    UPDATE users SET oura_access_token = ?, oura_refresh_token = ?, oura_expires_at = ?, updated_at = ?
+                    UPDATE users
+                    SET oura_access_token = ?,
+                        oura_refresh_token = ?,
+                        oura_expires_at = ?,
+                        oura_user_id = COALESCE(?, oura_user_id),
+                        updated_at = ?
                     WHERE id = ?
                 """),
-                (access_token, refresh_token or "", expires_at, now, user_id),
+                (access_token, refresh_token or "", expires_at, oura_user_id, now, user_id),
             )
             if cur.rowcount == 0:
                 cur.execute(
                     _q("""
-                        INSERT INTO users (id, oura_access_token, oura_refresh_token, oura_expires_at, created_at, updated_at)
-                        VALUES (?, ?, ?, ?, ?, ?)
+                        INSERT INTO users (id, oura_access_token, oura_refresh_token, oura_expires_at, oura_user_id, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
                     """),
-                    (user_id, access_token, refresh_token or "", expires_at, now, now),
+                    (user_id, access_token, refresh_token or "", expires_at, oura_user_id, now, now),
                 )
         else:
             cur.execute(
                 _q("""
-                    INSERT INTO users (id, oura_access_token, oura_refresh_token, oura_expires_at, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO users (id, oura_access_token, oura_refresh_token, oura_expires_at, oura_user_id, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                     ON CONFLICT(id) DO UPDATE SET
                         oura_access_token = excluded.oura_access_token,
                         oura_refresh_token = excluded.oura_refresh_token,
                         oura_expires_at = excluded.oura_expires_at,
+                        oura_user_id = COALESCE(excluded.oura_user_id, users.oura_user_id),
                         updated_at = excluded.updated_at
                 """),
-                (user_id, access_token, refresh_token or "", expires_at, now, now),
+                (user_id, access_token, refresh_token or "", expires_at, oura_user_id, now, now),
+            )
+
+
+def save_oura_webhook_event(
+    oura_user_id: str | None,
+    event_type: str | None,
+    payload: dict[str, Any],
+) -> None:
+    """Persist a received Oura webhook payload for debugging + future processing."""
+    received_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    payload_json = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+    with _get_conn() as conn:
+        cur = conn.cursor()
+        if _use_pg:
+            cur.execute(
+                _q("""
+                    INSERT INTO oura_webhook_events (oura_user_id, event_type, payload_json)
+                    VALUES (?, ?, ?)
+                """),
+                (oura_user_id, event_type, payload_json),
+            )
+        else:
+            cur.execute(
+                _q("""
+                    INSERT INTO oura_webhook_events (oura_user_id, event_type, received_at, payload_json)
+                    VALUES (?, ?, ?, ?)
+                """),
+                (oura_user_id, event_type, received_at, payload_json),
             )
 
 

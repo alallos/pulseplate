@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PulsePlate – Privacy & deletion</title>
+  <title>PulsePlate – Terms</title>
   <meta name="theme-color" content="#0f1419">
   <style>
     :root {
@@ -47,7 +47,7 @@
     a { color: var(--accent); text-decoration: none; font-weight: 700; }
     a:hover { text-decoration: underline; }
     .back {
-      display: flex;
+      display:flex;
       justify-content: space-between;
       gap: 1rem;
       align-items: center;
@@ -69,11 +69,7 @@
     h3 { margin-top: 1.2rem; margin-bottom: 0.5rem; }
     ul { padding-left: 1.25rem; }
     li { margin: 0.45rem 0; color: var(--muted); }
-    .policy-note {
-      font-size: 0.92rem;
-      color: var(--muted);
-      margin-top: 1rem;
-    }
+    .note { font-size: 0.92rem; color: var(--muted); margin-top: 1rem; }
   </style>
 </head>
 <body>
@@ -84,36 +80,29 @@
     </div>
 
     <div class="card">
-      <h1>Privacy & deletion</h1>
+      <h1>Terms of use</h1>
       <p class="muted" style="margin-top:0;">
         This is a short, plain-language summary. It is not legal advice.
       </p>
 
-      <h3>What we store</h3>
+      <h3>Use of the service</h3>
       <ul>
-        <li><strong>Oura access tokens</strong> (so we can fetch your biometrics).</li>
-        <li><strong>Your preferences</strong> (diet style, calorie target, goals, allergies, units).</li>
-        <li><strong>Your generated meal plans</strong> (so you can reopen them later).</li>
+        <li>PulsePlate generates meal plans and grocery lists using AI based on wearable data and your preferences.</li>
+        <li>Your health decisions remain yours—always consider allergies, medications, and professional medical advice.</li>
       </ul>
 
-      <h3>What we don’t do</h3>
+      <h3>Data and account</h3>
       <ul>
-        <li>We do not sell your data.</li>
-        <li>We don’t show your personal data publicly.</li>
+        <li>You control your connection to Oura and can delete your data at any time.</li>
+        <li>We process data needed to generate plans; we do not sell personal data.</li>
       </ul>
 
-      <h3>Your control</h3>
-      <p class="muted" style="margin:0;">
-        You can disconnect Oura or delete your data from the app (buttons in the connection area).
-        Deleting removes your saved plans and your user record.
+      <h3>Disclaimers</h3>
+      <p class="note">
+        The AI outputs are suggestions, not medical advice. If you have a medical condition, consult a qualified professional.
       </p>
-
-      <h3>Security</h3>
-      <p class="muted policy-note">
-        Access is protected with a JWT session cookie after Oura connect. OAuth state is signed using your server secret.
-      </p>
-      <p class="muted policy-note" style="margin-top: 0.6rem;">
-        For usage disclaimers, see the <a href="/terms">terms of use</a>.
+      <p class="muted note" style="margin-top:0;">
+        For details on data handling, see <a href="/privacy">privacy & deletion policy</a>.
       </p>
     </div>
   </div>
