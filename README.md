@@ -57,6 +57,22 @@ See `.env.example` for a full list.
 - **Grok:** [xAI API](https://console.x.ai/) — create an API key.  
 - **Oura:** [Oura Developer Portal](https://cloud.ouraring.com/) — create an app, set redirect URI(s), and request scopes (e.g. `email`, `personal`, `daily`, `heartrate`).
 
+### Oura webhooks (optional)
+
+PulsePlate’s **core loop is pull-based**: when you open the app, refresh biometrics, or generate a plan, the server calls the Oura API with the user’s OAuth tokens. **You are not blocked on webhooks** for meal plans or biometrics.
+
+Webhooks are for **server-side notifications** when Oura **updates** data (typically after a ring sync). They do **not** replay historical days that are already “locked in.”
+
+1. **Callback URL** must be public HTTPS, e.g. `https://your-app.up.railway.app/webhooks/oura` (no double `https://`, no `//` before the path).
+2. **Verification:** Oura sends `GET` with `verification_token` and `challenge`; the app must return JSON `{ "challenge": "<same value>" }`. If you set `OURA_WEBHOOK_VERIFICATION_TOKEN` in the environment, it must **exactly match** the `verification_token` you used when creating the subscription.
+3. **Create subscription** (per `event_type` + `data_type` pair), with **client** headers (not the user Bearer token):
+
+   `POST https://api.ouraring.com/v2/webhook/subscription`  
+   Headers: `x-client-id`, `x-client-secret`, `Content-Type: application/json`  
+   Body example: `callback_url`, `verification_token`, `event_type` (`create` | `update` | `delete`), `data_type` (e.g. `sleep`, `daily_sleep`, `daily_readiness`, `daily_activity` — see [Oura API v2 docs](https://cloud.ouraring.com/v2/docs)).
+
+4. **List subscriptions:** `GET https://api.ouraring.com/v2/webhook/subscription` with the same `x-client-id` / `x-client-secret` headers.
+
 ## Deploy to Railway
 
 1. Create a project and connect your GitHub repo.  

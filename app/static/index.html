@@ -730,6 +730,10 @@
       <div id="webhookStatus" class="status loading" style="display: none; margin-bottom: 0.75rem;">Webhook: checking…</div>
       <div id="webhookEventsWrap" class="webhook-events-wrap" style="display: none;">
         <div class="webhook-events-title">Recent webhook events</div>
+        <p class="webhook-events-hint" style="color: var(--muted); font-size: 0.82rem; margin: 0 0 0.5rem 0; line-height: 1.35;">
+          Oura sends these when data <strong>updates</strong> (e.g. after a sync)—not for replaying past locked days.
+          Meal plans still use live Oura API data whenever you refresh or generate a plan.
+        </p>
         <ul id="webhookEventsList" class="webhook-events-list"></ul>
       </div>
       <a id="connectBtn" href="/auth/oura/authorize" class="button" style="display: none;">Connect Oura</a>

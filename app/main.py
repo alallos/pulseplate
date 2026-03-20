@@ -175,6 +175,24 @@ async def terms():
     raise HTTPException(status_code=404, detail="Not found")
 
 
+@app.get("/manifest.webmanifest")
+async def manifest_webmanifest():
+    """PWA manifest (referenced from index.html)."""
+    path = _STATIC_DIR / "manifest.webmanifest"
+    if path.exists():
+        return FileResponse(path, media_type="application/manifest+json")
+    raise HTTPException(status_code=404, detail="Not found")
+
+
+@app.get("/service-worker.js")
+async def service_worker_js():
+    """Service worker for offline shell caching (registered from index.html)."""
+    path = _STATIC_DIR / "service-worker.js"
+    if path.exists():
+        return FileResponse(path, media_type="application/javascript; charset=utf-8")
+    raise HTTPException(status_code=404, detail="Not found")
+
+
 @app.get("/health")
 async def health():
     """Health check for monitoring / load balancers. Always returns 200 if the app is up."""

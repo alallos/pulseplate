@@ -315,7 +315,10 @@ def test_delete_account_redirects_and_deletes_data(mock_delete_user_data, auth_h
     assert "Set-Cookie" in response.headers or "set-cookie" in response.headers
 
 
-@pytest.mark.parametrize("path", ["/about", "/privacy", "/terms"])
+@pytest.mark.parametrize(
+    "path",
+    ["/about", "/privacy", "/terms", "/manifest.webmanifest", "/service-worker.js"],
+)
 def test_public_pages_return_200(client, path):
     response = client.get(path)
     assert response.status_code == 200
