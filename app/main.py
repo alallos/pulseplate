@@ -239,13 +239,34 @@ def _extract_oura_event_type(payload: object) -> str | None:
     return None
 
 
-@app.post("/webhooks/oura", include_in_schema=False)
+@app.api_route("/webhooks/oura", methods=["GET", "POST"], include_in_schema=False)
 async def oura_webhook(request: Request):
     """
     Receiver endpoint for Oura webhooks.
 
-    Note: This implementation stores the raw webhook payload for debugging and future processing.
+    Oura subscription setup requires a verification step:
+    - Oura sends GET with `verification_token` and `challenge`
+    - Your endpoint must return JSON: { "challenge": "..." }
+
+    Event delivery:
+    - Oura sends POST with JSON payload
+    - We persist minimal diagnostics for troubleshooting
     """
+    if request.method == "GET":
+        verification_token = request.query_params.get("verification_token")
+        challenge = request.query_params.get("challenge")
+
+        expected = (os.getenv("OURA_WEBHOOK_VERIFICATION_TOKEN") or "").strip()
+        if expected:
+            if not verification_token or verification_token != expected:
+                raise HTTPException(status_code=401, detail="Invalid verification token")
+
+        if not challenge:
+            raise HTTPException(status_code=400, detail="Missing challenge")
+
+        return {"challenge": challenge}
+
+    # POST event payload
     try:
         payload = await request.json()
     except Exception:
@@ -253,13 +274,10 @@ async def oura_webhook(request: Request):
 
     oura_user_id = _extract_oura_user_id(payload)
     event_type = _extract_oura_event_type(payload)
+
     # Log minimal diagnostics (avoid dumping full payload).
     try:
-        log.info(
-            "Oura webhook received event_type=%s oura_user_id=%s",
-            event_type,
-            oura_user_id,
-        )
+        log.info("Oura webhook received event_type=%s oura_user_id=%s", event_type, oura_user_id)
     except Exception:
         pass
 

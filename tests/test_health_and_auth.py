@@ -398,3 +398,12 @@ def test_oura_webhook_rejects_invalid_json(client):
     )
     assert response.status_code == 400
 
+
+def test_oura_webhook_verification_get_returns_challenge(client):
+    response = client.get(
+        "/webhooks/oura?verification_token=any-token&challenge=test-challenge"
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["challenge"] == "test-challenge"
+
