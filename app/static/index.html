@@ -737,6 +737,7 @@
         </p>
         <ul id="webhookEventsList" class="webhook-events-list"></ul>
       </div>
+      <div id="webhookSubscriptions" style="display: none; margin-bottom: 0.75rem; color: var(--muted); font-size: 0.85rem; line-height: 1.35;"></div>
       <a id="connectBtn" href="/auth/oura/authorize" class="button" style="display: none;">Connect Oura</a>
       <div id="actions" style="display: none;">
         <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom: 0.75rem;">
@@ -872,6 +873,7 @@
     const webhookStatusEl = document.getElementById('webhookStatus');
     const webhookEventsWrap = document.getElementById('webhookEventsWrap');
     const webhookEventsList = document.getElementById('webhookEventsList');
+    const webhookSubscriptionsEl = document.getElementById('webhookSubscriptions');
     const connectBtn = document.getElementById('connectBtn');
     const actionsEl = document.getElementById('actions');
     const getPlanBtn = document.getElementById('getPlanBtn');
@@ -969,12 +971,14 @@
           if (r.status === 401) {
             webhookStatusEl.style.display = 'none';
             if (webhookEventsWrap) webhookEventsWrap.style.display = 'none';
+            if (webhookSubscriptionsEl) webhookSubscriptionsEl.style.display = 'none';
             return;
           }
           webhookStatusEl.classList.remove('loading');
           webhookStatusEl.classList.add('error');
           webhookStatusEl.textContent = 'Webhook: unavailable';
           if (webhookEventsWrap) webhookEventsWrap.style.display = 'none';
+          if (webhookSubscriptionsEl) webhookSubscriptionsEl.style.display = 'none';
           return;
         }
 
@@ -984,8 +988,11 @@
           webhookStatusEl.classList.add('error');
           webhookStatusEl.textContent = 'Webhook: not connected';
           if (webhookEventsWrap) webhookEventsWrap.style.display = 'none';
+          if (webhookSubscriptionsEl) webhookSubscriptionsEl.style.display = 'none';
           return;
         }
+
+        await loadWebhookSubscriptions();
 
         const lastAt = data.last_event_at;
         const lastType = data.last_event_type ? (' (' + data.last_event_type + ')') : '';
@@ -1018,6 +1025,34 @@
         webhookStatusEl.classList.add('error');
         webhookStatusEl.textContent = 'Webhook: unavailable';
         if (webhookEventsWrap) webhookEventsWrap.style.display = 'none';
+      }
+    }
+
+    async function loadWebhookSubscriptions() {
+      if (!webhookSubscriptionsEl) return;
+      webhookSubscriptionsEl.style.display = 'none';
+      try {
+        const r = await fetch('/webhooks/oura/subscriptions', { credentials: 'include' });
+        if (!r.ok) return;
+        const data = await r.json();
+        const subs = Array.isArray(data.subscriptions) ? data.subscriptions : [];
+        if (!subs.length) return;
+        const fmt = subs
+          .map(s => {
+            const et = s.event_type ? String(s.event_type) : '';
+            const dt = s.data_type ? String(s.data_type) : '';
+            const exp = s.expiration_time ? String(s.expiration_time) : '';
+            const expShort = exp && exp.length >= 10 ? exp.slice(0, 10) : '';
+            return (et && dt) ? (et + '/' + dt + (expShort ? ' (exp ' + expShort + ')' : '')) : '';
+          })
+          .filter(Boolean)
+          .join(', ');
+        if (!fmt) return;
+        webhookSubscriptionsEl.textContent = 'Oura subscriptions: ' + fmt;
+        webhookSubscriptionsEl.style.display = 'block';
+      } catch (_) {
+        // Don't break the rest of the webhook panel on subscription fetch issues.
+        webhookSubscriptionsEl.style.display = 'none';
       }
     }
 

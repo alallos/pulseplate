@@ -349,6 +349,30 @@ def test_webhook_events_requires_auth(client):
     assert response.status_code == 401
 
 
+def test_webhook_subscriptions_requires_auth(client):
+    response = client.get("/webhooks/oura/subscriptions")
+    assert response.status_code == 401
+
+
+@patch("app.main.list_oura_webhook_subscriptions", new_callable=AsyncMock)
+def test_webhook_subscriptions_returns(mock_subs, auth_headers, client):
+    mock_subs.return_value = [
+        {
+            "id": "sub-1",
+            "callback_url": "https://example.com/webhooks/oura",
+            "event_type": "update",
+            "data_type": "daily_sleep",
+            "expiration_time": "2026-06-18T19:11:11Z",
+        }
+    ]
+    response = client.get("/webhooks/oura/subscriptions", headers=auth_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert "subscriptions" in data
+    assert len(data["subscriptions"]) == 1
+    assert data["subscriptions"][0]["data_type"] == "daily_sleep"
+
+
 @patch("app.main.get_oura_tokens")
 @patch("app.main.get_latest_oura_webhook_event_for_user")
 def test_webhook_status_returns_latest_event(mock_latest, mock_tokens, auth_headers, client):

@@ -1,6 +1,7 @@
 """Oura API v2 client: fetch biometric data and map to BiometricData."""
 
 import asyncio
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -212,3 +213,49 @@ async def fetch_oura_biometrics(access_token: str) -> BiometricData:
         allergies=None,
         weekly_summary=weekly_summary or None,
     )
+
+
+async def list_oura_webhook_subscriptions() -> list[dict[str, Any]]:
+    """
+    List active Oura webhook subscriptions for the configured Oura app.
+
+    Note: the Oura webhook subscription endpoints use header-based auth:
+    `x-client-id` and `x-client-secret` (not the user's OAuth Bearer token).
+    """
+    client_id = (os.getenv("OURA_CLIENT_ID") or "").strip()
+    client_secret = (os.getenv("OURA_CLIENT_SECRET") or "").strip()
+    if not client_id or not client_secret:
+        raise HTTPException(
+            status_code=503,
+            detail="OURA_CLIENT_ID and OURA_CLIENT_SECRET must be configured to list webhook subscriptions.",
+        )
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.get(
+            f"{OURA_API_BASE}/v2/webhook/subscription",
+            headers={"x-client-id": client_id, "x-client-secret": client_secret},
+        )
+
+    if resp.is_error:
+        try:
+            err = resp.json()
+            msg = err.get("detail") or err.get("message") or resp.text
+        except Exception:
+            msg = resp.text or f"HTTP {resp.status_code}"
+
+        raise HTTPException(
+            status_code=resp.status_code if 400 <= resp.status_code < 600 else 502,
+            detail=f"Oura webhook subscription list: {msg}",
+        )
+
+    try:
+        data = resp.json()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Oura webhook subscription list invalid JSON: {e!s}") from e
+
+    if isinstance(data, list):
+        return data
+    if isinstance(data, dict) and isinstance(data.get("data"), list):
+        return data["data"]
+
+    raise HTTPException(status_code=502, detail="Oura webhook subscription list returned unexpected payload shape.")

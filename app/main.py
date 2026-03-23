@@ -43,7 +43,11 @@ from app.services.oura_oauth import (
     get_valid_access_token,
     verify_state,
 )
-from app.services.oura_client import fetch_oura_biometrics, fetch_oura_personal_info
+from app.services.oura_client import (
+    fetch_oura_biometrics,
+    fetch_oura_personal_info,
+    list_oura_webhook_subscriptions,
+)
 from app.db import (
     init_db,
     get_user_preferences,
@@ -390,6 +394,22 @@ async def oura_webhook_debug(user_id: CurrentUserId, limit: int = Query(20, ge=1
         "recent_events_all_users": recent_all,
         "events_count_all_users": events_count_all,
     }
+
+
+@app.get(
+    "/webhooks/oura/subscriptions",
+    summary="Active Oura webhook subscriptions (from your Oura app)",
+    include_in_schema=False,
+)
+async def oura_webhook_subscriptions(user_id: CurrentUserId):
+    """
+    List active Oura webhook subscriptions so you can verify callback configuration.
+
+    This is app-level configuration (not tied to a single ring user), but we keep it auth-protected
+    to avoid exposing your Oura client credentials usage surface.
+    """
+    subs = await list_oura_webhook_subscriptions()
+    return {"subscriptions": subs}
 
 
 # --- Oura OAuth ---
