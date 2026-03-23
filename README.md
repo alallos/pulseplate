@@ -88,6 +88,14 @@ Webhooks are for **server-side notifications** when Oura **updates** data (typic
 python -m pytest
 ```
 
+### PWA icons (optional refresh)
+
+Manifest and Apple touch icon use `app/static/icons/icon-192.png` and `icon-512.png`. Regenerate with:
+
+```bash
+python scripts/gen_pwa_icons.py
+```
+
 ## License
 
 Use and extend as you like.

@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import Union
 
 from fastapi import FastAPI, Body, Query, HTTPException, Request
-from fastapi.responses import RedirectResponse, FileResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -191,6 +192,25 @@ async def service_worker_js():
     if path.exists():
         return FileResponse(path, media_type="application/javascript; charset=utf-8")
     raise HTTPException(status_code=404, detail="Not found")
+
+
+_FAVICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="PulsePlate">
+  <rect width="32" height="32" rx="7" fill="#1a2332"/>
+  <circle cx="16" cy="16" r="9" fill="none" stroke="#58a6ff" stroke-width="2"/>
+  <path d="M7 19 Q11 11 16 15 T25 11" fill="none" stroke="#3fb950" stroke-width="1.6" stroke-linecap="round"/>
+</svg>"""
+
+
+@app.get("/favicon.svg", include_in_schema=False)
+async def favicon_svg():
+    """Vector favicon (tab icon)."""
+    return Response(content=_FAVICON_SVG, media_type="image/svg+xml")
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon_ico():
+    """Browsers request /favicon.ico by default; redirect to SVG."""
+    return RedirectResponse(url="/favicon.svg", status_code=302)
 
 
 @app.get("/health")
@@ -648,6 +668,11 @@ async def get_plan(
     if not plan:
         raise HTTPException(status_code=404, detail="Plan not found")
     return plan
+
+
+_ICONS_DIR = _STATIC_DIR / "icons"
+if _ICONS_DIR.is_dir():
+    app.mount("/icons", StaticFiles(directory=str(_ICONS_DIR)), name="icons")
 
 if __name__ == "__main__":
     # For quick local runs: python app/main.py

@@ -317,11 +317,26 @@ def test_delete_account_redirects_and_deletes_data(mock_delete_user_data, auth_h
 
 @pytest.mark.parametrize(
     "path",
-    ["/about", "/privacy", "/terms", "/manifest.webmanifest", "/service-worker.js"],
+    [
+        "/about",
+        "/privacy",
+        "/terms",
+        "/manifest.webmanifest",
+        "/service-worker.js",
+        "/favicon.svg",
+        "/icons/icon-192.png",
+        "/icons/icon-512.png",
+    ],
 )
 def test_public_pages_return_200(client, path):
     response = client.get(path)
     assert response.status_code == 200
+
+
+def test_favicon_ico_redirects_to_svg(client):
+    response = client.get("/favicon.ico", follow_redirects=False)
+    assert response.status_code == 302
+    assert response.headers.get("location") == "/favicon.svg"
 
 
 def test_webhook_status_requires_auth(client):
