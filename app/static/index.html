@@ -971,7 +971,11 @@
       webhookStatusEl.classList.remove('connected', 'error');
       webhookStatusEl.textContent = 'Webhook: checking…';
       try {
-        const r = await fetch('/webhooks/oura/status', { credentials: 'include' });
+        const r = await fetch('/webhooks/oura/status?ts=' + Date.now(), {
+          credentials: 'include',
+          cache: 'no-store',
+          headers: { 'Cache-Control': 'no-cache' },
+        });
         if (!r.ok) {
           if (r.status === 401) {
             webhookStatusEl.style.display = 'none';
