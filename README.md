@@ -61,7 +61,7 @@ See `.env.example` for a full list.
 
 PulsePlate’s **core loop is pull-based**: when you open the app, refresh biometrics, or generate a plan, the server calls the Oura API with the user’s OAuth tokens. **You are not blocked on webhooks** for meal plans or biometrics.
 
-Webhooks are for **server-side notifications** when Oura **updates** data (typically after a ring sync). They do **not** replay historical days that are already “locked in.”
+Webhooks are for **server-side notifications** when Oura **updates** data (typically after a ring sync). They do **not** replay historical days that are already “locked in.” The **web app UI does not show** webhook status or recent events (users see when **Oura data was last loaded** from the API instead). For debugging, use authenticated endpoints such as `GET /webhooks/oura/debug`, `/webhooks/oura/status`, and `/webhooks/oura/events`.
 
 1. **Callback URL** must be public HTTPS, e.g. `https://your-app.up.railway.app/webhooks/oura` (no double `https://`, no `//` before the path).
 2. **Verification:** Oura sends `GET` with `verification_token` and `challenge`; the app must return JSON `{ "challenge": "<same value>" }`. If you set `OURA_WEBHOOK_VERIFICATION_TOKEN` in the environment, it must **exactly match** the `verification_token` you used when creating the subscription.

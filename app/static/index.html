@@ -443,38 +443,11 @@
     }
     .footer-links a:hover { text-decoration: underline; }
 
-    .webhook-events-wrap {
-      margin-top: 0.4rem;
-    }
-    .webhook-events-title {
-      font-size: 0.78rem;
-      color: var(--muted);
-      margin: 0 0 0.35rem 0;
-      font-weight: 600;
-    }
-    .webhook-events-list {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 0.25rem;
-    }
-    .webhook-event-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      gap: 0.75rem;
-      padding: 0.25rem 0.35rem;
-      border: 1px solid rgba(45,58,77,0.45);
-      border-radius: 8px;
-      background: rgba(255,255,255,0.02);
-      color: var(--muted);
+    .biometrics-fetched-at {
       font-size: 0.82rem;
-    }
-    .webhook-event-item .etype {
-      color: var(--text);
-      font-weight: 650;
+      color: var(--muted);
+      margin: -0.2rem 0 0.85rem 0;
+      line-height: 1.35;
     }
 
     /* Skeleton loading (premium shimmer placeholders) */
@@ -728,16 +701,6 @@
     <!-- Connection -->
     <div class="card">
       <div id="status" class="status loading">Checking Oura connection…</div>
-      <div id="webhookStatus" class="status loading" style="display: none; margin-bottom: 0.75rem;">Webhook: checking…</div>
-      <div id="webhookEventsWrap" class="webhook-events-wrap" style="display: none;">
-        <div class="webhook-events-title">Recent webhook events</div>
-        <p class="webhook-events-hint" style="color: var(--muted); font-size: 0.82rem; margin: 0 0 0.5rem 0; line-height: 1.35;">
-          Oura sends these when data <strong>updates</strong> (e.g. after a sync)—not for replaying past locked days.
-          Meal plans still use live Oura API data whenever you refresh or generate a plan.
-        </p>
-        <ul id="webhookEventsList" class="webhook-events-list"></ul>
-      </div>
-      <div id="webhookSubscriptions" style="display: none; margin-bottom: 0.75rem; color: var(--muted); font-size: 0.85rem; line-height: 1.35;"></div>
       <a id="connectBtn" href="/auth/oura/authorize" class="button" style="display: none;">Connect Oura</a>
       <div id="actions" style="display: none;">
         <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom: 0.75rem;">
@@ -766,6 +729,7 @@
     <!-- Today's biometrics (when connected) -->
     <div id="biometricsCard" class="card" style="display: none;">
       <h2>Today's biometrics</h2>
+      <p id="biometricsFetchedAt" class="biometrics-fetched-at" style="display: none;" aria-live="polite"></p>
       <div id="biometricsContent" class="loading-inline">Loading…</div>
       <div id="biometricsActions" class="biometrics-actions" style="display: none;">
         <button type="button" class="secondary" id="refreshBiometricsBtn">Refresh</button>
@@ -870,10 +834,6 @@
 
   <script>
     const statusEl = document.getElementById('status');
-    const webhookStatusEl = document.getElementById('webhookStatus');
-    const webhookEventsWrap = document.getElementById('webhookEventsWrap');
-    const webhookEventsList = document.getElementById('webhookEventsList');
-    const webhookSubscriptionsEl = document.getElementById('webhookSubscriptions');
     const connectBtn = document.getElementById('connectBtn');
     const actionsEl = document.getElementById('actions');
     const getPlanBtn = document.getElementById('getPlanBtn');
@@ -927,83 +887,22 @@
     let lastGroceryList = [];
     let lastPlan = null;
     let toastTimer = null;
-    let webhookRefreshTimer = null;
-    let webhookPillClockTimer = null;
-    let webhookStatusInFlight = false;
-    let webhookPillMeta = null;
-    const WEBHOOK_STATUS_REFRESH_MS = 60 * 1000; // keep webhook status fresh while the page stays open
-    const WEBHOOK_PILL_CLOCK_MS = 5 * 1000; // tick often so age text changes (whole "min" rounds look frozen ~60s)
-    const WEBHOOK_ACTIVE_MAX_MS = 120 * 60 * 1000; // match prior "active if <= 120 min" but use real ms
-    const WEBHOOK_FETCH_TIMEOUT_MS = 15000;
 
-    function fetchWithTimeout(url, options) {
-      const c = new AbortController();
-      const t = setTimeout(() => c.abort(), WEBHOOK_FETCH_TIMEOUT_MS);
-      const merged = Object.assign({}, options, { signal: c.signal });
-      return fetch(url, merged).finally(() => clearTimeout(t));
+    function hideBiometricsFetchedAt() {
+      const el = document.getElementById('biometricsFetchedAt');
+      if (!el) return;
+      el.style.display = 'none';
+      el.textContent = '';
     }
 
-    function webhookAgeLabelForIso(iso) {
-      const dt = new Date(iso);
-      const t = dt.getTime();
-      if (Number.isNaN(t)) return null;
-      const ms = Date.now() - t;
-      if (Number.isNaN(ms)) return null;
-      const secTotal = Math.max(0, Math.floor(ms / 1000));
-      let label;
-      if (secTotal < 90) {
-        label = secTotal + 's ago';
-      } else if (secTotal < 3600) {
-        const m = Math.floor(secTotal / 60);
-        const s = secTotal % 60;
-        label = m + 'm ' + s + 's ago';
-      } else if (secTotal < 48 * 3600) {
-        const h = Math.floor(secTotal / 3600);
-        const m = Math.floor((secTotal % 3600) / 60);
-        label = h + 'h ' + m + 'm ago';
-      } else {
-        label = Math.floor(secTotal / 86400) + 'd ago';
-      }
-      return { ms, label };
+    function updateBiometricsFetchedAt() {
+      const el = document.getElementById('biometricsFetchedAt');
+      if (!el) return;
+      el.style.display = 'block';
+      el.textContent =
+        'Oura data loaded at ' +
+        new Date().toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
     }
-
-    function renderWebhookPillFromClock() {
-      if (!webhookStatusEl || !webhookPillMeta) return;
-      if (webhookPillMeta.kind === 'waiting') {
-        webhookStatusEl.classList.remove('loading', 'error', 'connected');
-        webhookStatusEl.classList.add('loading');
-        webhookStatusEl.textContent = 'Webhook connected' + webhookPillMeta.typeSuffix + ' · waiting for first event';
-        return;
-      }
-      if (webhookPillMeta.kind !== 'aged') return;
-      const parts = webhookAgeLabelForIso(webhookPillMeta.iso);
-      if (!parts) {
-        webhookStatusEl.classList.remove('loading', 'error', 'connected');
-        webhookStatusEl.classList.add('connected');
-        webhookStatusEl.textContent = 'Webhook received' + webhookPillMeta.typeSuffix;
-        return;
-      }
-      const isActive = parts.ms <= WEBHOOK_ACTIVE_MAX_MS;
-      webhookStatusEl.classList.remove('loading', 'error', 'connected');
-      webhookStatusEl.classList.add(isActive ? 'connected' : 'error');
-      webhookStatusEl.textContent =
-        (isActive ? 'Webhook active' : 'Webhook inactive') + webhookPillMeta.typeSuffix + ' · last event ' + parts.label;
-    }
-
-    function startWebhookPillClock() {
-      stopWebhookPillClock();
-      renderWebhookPillFromClock();
-      webhookPillClockTimer = setInterval(renderWebhookPillFromClock, WEBHOOK_PILL_CLOCK_MS);
-    }
-
-    function stopWebhookPillClock() {
-      if (webhookPillClockTimer) clearInterval(webhookPillClockTimer);
-      webhookPillClockTimer = null;
-    }
-
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden) renderWebhookPillFromClock();
-    });
 
     function setPlanMode(mode) {
       planMode = mode;
@@ -1036,165 +935,6 @@
       return now.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
     }
 
-    async function loadWebhookStatus() {
-      if (!webhookStatusEl) return;
-      if (webhookStatusInFlight) return;
-      webhookStatusInFlight = true;
-      webhookStatusEl.style.display = 'inline-flex';
-      const isFirstPoll = !webhookPillMeta;
-      if (isFirstPoll) {
-        webhookStatusEl.classList.add('loading');
-        webhookStatusEl.classList.remove('connected', 'error');
-        webhookStatusEl.textContent = 'Webhook: checking…';
-      }
-      try {
-        const r = await fetchWithTimeout('/webhooks/oura/status?ts=' + Date.now(), {
-          credentials: 'include',
-          cache: 'no-store',
-          headers: { 'Cache-Control': 'no-cache' },
-        });
-        if (!r.ok) {
-          if (r.status === 401) {
-            webhookStatusEl.style.display = 'none';
-            if (webhookEventsWrap) webhookEventsWrap.style.display = 'none';
-            if (webhookSubscriptionsEl) webhookSubscriptionsEl.style.display = 'none';
-            webhookPillMeta = null;
-            stopWebhookAutoRefresh();
-            return;
-          }
-          webhookStatusEl.classList.remove('loading');
-          webhookStatusEl.classList.add('error');
-          webhookStatusEl.textContent = 'Webhook: unavailable';
-          if (webhookEventsWrap) webhookEventsWrap.style.display = 'none';
-          if (webhookSubscriptionsEl) webhookSubscriptionsEl.style.display = 'none';
-          // Keep timer running; next tick may succeed.
-          return;
-        }
-
-        const data = await r.json();
-        if (!data.connected) {
-          webhookPillMeta = null;
-          webhookStatusEl.classList.remove('loading');
-          webhookStatusEl.classList.add('error');
-          webhookStatusEl.textContent = 'Webhook: not connected';
-          if (webhookEventsWrap) webhookEventsWrap.style.display = 'none';
-          if (webhookSubscriptionsEl) webhookSubscriptionsEl.style.display = 'none';
-          stopWebhookAutoRefresh();
-          return;
-        }
-
-        const lastAt = data.last_event_at;
-        const lastType = data.last_event_type ? (' (' + data.last_event_type + ')') : '';
-
-        if (!lastAt) {
-          webhookPillMeta = { kind: 'waiting', typeSuffix: lastType };
-          renderWebhookPillFromClock();
-          return;
-        }
-
-        webhookPillMeta = { kind: 'aged', iso: String(lastAt), typeSuffix: lastType };
-        renderWebhookPillFromClock();
-      } catch (_) {
-        webhookStatusEl.classList.remove('loading');
-        webhookStatusEl.classList.add('error');
-        webhookStatusEl.textContent = 'Webhook: unavailable';
-        if (webhookEventsWrap) webhookEventsWrap.style.display = 'none';
-        // Keep timer running; next tick may succeed.
-      }
-      finally {
-        // Always release before subscriptions/events — a slow/hung secondary fetch must not block the next poll.
-        webhookStatusInFlight = false;
-      }
-      try {
-        await loadWebhookSubscriptions();
-      } catch (_) {}
-      try {
-        await loadWebhookEvents();
-      } catch (_) {}
-    }
-
-    function stopWebhookAutoRefresh() {
-      if (webhookRefreshTimer) clearInterval(webhookRefreshTimer);
-      webhookRefreshTimer = null;
-      stopWebhookPillClock();
-      webhookPillMeta = null;
-    }
-
-    function startWebhookAutoRefresh() {
-      // Do not call stopWebhookAutoRefresh() here — it clears webhookPillMeta and would race with
-      // the async loadWebhookStatus() that checkConnection kicks off in the same tick.
-      if (webhookRefreshTimer) clearInterval(webhookRefreshTimer);
-      webhookRefreshTimer = setInterval(() => {
-        if (!webhookStatusInFlight) loadWebhookStatus();
-      }, WEBHOOK_STATUS_REFRESH_MS);
-      stopWebhookPillClock();
-      startWebhookPillClock();
-    }
-
-    async function loadWebhookSubscriptions() {
-      if (!webhookSubscriptionsEl) return;
-      webhookSubscriptionsEl.style.display = 'none';
-      try {
-        const r = await fetchWithTimeout('/webhooks/oura/subscriptions?ts=' + Date.now(), {
-          credentials: 'include',
-          cache: 'no-store',
-        });
-        if (!r.ok) return;
-        const data = await r.json();
-        const subs = Array.isArray(data.subscriptions) ? data.subscriptions : [];
-        if (!subs.length) return;
-        const fmt = subs
-          .map(s => {
-            const et = s.event_type ? String(s.event_type) : '';
-            const dt = s.data_type ? String(s.data_type) : '';
-            const exp = s.expiration_time ? String(s.expiration_time) : '';
-            const expShort = exp && exp.length >= 10 ? exp.slice(0, 10) : '';
-            return (et && dt) ? (et + '/' + dt + (expShort ? ' (exp ' + expShort + ')' : '')) : '';
-          })
-          .filter(Boolean)
-          .join(', ');
-        if (!fmt) return;
-        webhookSubscriptionsEl.textContent = 'Oura subscriptions: ' + fmt;
-        webhookSubscriptionsEl.style.display = 'block';
-      } catch (_) {
-        // Don't break the rest of the webhook panel on subscription fetch issues.
-        webhookSubscriptionsEl.style.display = 'none';
-      }
-    }
-
-    async function loadWebhookEvents() {
-      if (!webhookEventsWrap || !webhookEventsList) return;
-      try {
-        const r = await fetchWithTimeout('/webhooks/oura/events?limit=5&ts=' + Date.now(), {
-          credentials: 'include',
-          cache: 'no-store',
-        });
-        if (!r.ok) {
-          webhookEventsWrap.style.display = 'none';
-          return;
-        }
-        const data = await r.json();
-        const events = Array.isArray(data.events) ? data.events : [];
-        webhookEventsList.innerHTML = '';
-        if (!events.length) {
-          webhookEventsList.innerHTML = '<li style="color: var(--muted); font-size: 0.85rem; padding: 0.25rem 0.35rem;">No webhook events yet.</li>';
-          webhookEventsWrap.style.display = 'block';
-          return;
-        }
-        events.forEach(ev => {
-          const li = document.createElement('li');
-          li.className = 'webhook-event-item';
-          const et = ev.event_type ? String(ev.event_type) : 'event';
-          const ts = ev.received_at ? String(ev.received_at) : '';
-          li.innerHTML = '<span class="etype">' + et + '</span><span style="color: var(--muted); font-size: 0.82rem;">' + ts + '</span>';
-          webhookEventsList.appendChild(li);
-        });
-        webhookEventsWrap.style.display = 'block';
-      } catch (_) {
-        webhookEventsWrap.style.display = 'none';
-      }
-    }
-
     async function checkConnection() {
       statusEl.classList.add('loading');
       statusEl.classList.remove('connected', 'error');
@@ -1215,8 +955,6 @@
           loadBiometrics();
           loadPreferences();
           loadHistory();
-          loadWebhookStatus();
-          startWebhookAutoRefresh();
         } else {
           statusEl.textContent = (r.status === 401)
             ? 'Session expired or not connected. Connect Oura to continue.'
@@ -1227,8 +965,6 @@
           biometricsCard.style.display = 'none';
           prefsCard.style.display = 'none';
           historyCard.style.display = 'none';
-          if (webhookStatusEl) webhookStatusEl.style.display = 'none';
-          stopWebhookAutoRefresh();
           onboardingBody.classList.remove('collapsed');
           onboardingToggle.textContent = 'Hide';
           onboardingToggle.setAttribute('aria-expanded', 'true');
@@ -1240,12 +976,11 @@
         actionsEl.style.display = 'none';
         biometricsCard.style.display = 'none';
         prefsCard.style.display = 'none';
-        if (webhookStatusEl) webhookStatusEl.style.display = 'none';
-        stopWebhookAutoRefresh();
       }
     }
 
     async function loadBiometrics() {
+      hideBiometricsFetchedAt();
       biometricsActions.style.display = 'none';
       biometricsContent.innerHTML = `
         <div class="skeleton-grid">
@@ -1309,13 +1044,16 @@
             ` : ''}
           `;
           biometricsActions.style.display = 'block';
+          updateBiometricsFetchedAt();
         } else {
           biometricsContent.textContent = 'Could not load biometrics. ' + (data.detail || r.statusText);
           biometricsContent.classList.add('error');
+          hideBiometricsFetchedAt();
         }
       } catch (e) {
         biometricsContent.textContent = 'Failed to load biometrics.';
         biometricsContent.classList.add('error');
+        hideBiometricsFetchedAt();
       }
     }
 
