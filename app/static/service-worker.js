@@ -1,5 +1,12 @@
-const CACHE_NAME = 'pulseplate-shell-v1';
-const URLS_TO_CACHE = ['/', '/manifest.webmanifest'];
+const CACHE_NAME = 'pulseplate-shell-v2';
+// Keep this list focused on the "app shell" so we don't accidentally cache stale HTML/JS forever.
+const URLS_TO_CACHE = [
+  '/',
+  '/manifest.webmanifest',
+  '/favicon.svg',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
