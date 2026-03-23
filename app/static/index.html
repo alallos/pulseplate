@@ -927,6 +927,9 @@
     let lastGroceryList = [];
     let lastPlan = null;
     let toastTimer = null;
+    let webhookRefreshTimer = null;
+    let webhookStatusInFlight = false;
+    const WEBHOOK_STATUS_REFRESH_MS = 60 * 1000; // keep webhook status fresh while the page stays open
 
     function setPlanMode(mode) {
       planMode = mode;
@@ -961,6 +964,8 @@
 
     async function loadWebhookStatus() {
       if (!webhookStatusEl) return;
+      if (webhookStatusInFlight) return;
+      webhookStatusInFlight = true;
       webhookStatusEl.style.display = 'inline-flex';
       webhookStatusEl.classList.add('loading');
       webhookStatusEl.classList.remove('connected', 'error');
@@ -972,6 +977,7 @@
             webhookStatusEl.style.display = 'none';
             if (webhookEventsWrap) webhookEventsWrap.style.display = 'none';
             if (webhookSubscriptionsEl) webhookSubscriptionsEl.style.display = 'none';
+            stopWebhookAutoRefresh();
             return;
           }
           webhookStatusEl.classList.remove('loading');
@@ -979,6 +985,7 @@
           webhookStatusEl.textContent = 'Webhook: unavailable';
           if (webhookEventsWrap) webhookEventsWrap.style.display = 'none';
           if (webhookSubscriptionsEl) webhookSubscriptionsEl.style.display = 'none';
+          // Keep timer running; next tick may succeed.
           return;
         }
 
@@ -989,6 +996,7 @@
           webhookStatusEl.textContent = 'Webhook: not connected';
           if (webhookEventsWrap) webhookEventsWrap.style.display = 'none';
           if (webhookSubscriptionsEl) webhookSubscriptionsEl.style.display = 'none';
+          stopWebhookAutoRefresh();
           return;
         }
 
@@ -1025,7 +1033,24 @@
         webhookStatusEl.classList.add('error');
         webhookStatusEl.textContent = 'Webhook: unavailable';
         if (webhookEventsWrap) webhookEventsWrap.style.display = 'none';
+        // Keep timer running; next tick may succeed.
       }
+      finally {
+        webhookStatusInFlight = false;
+      }
+    }
+
+    function stopWebhookAutoRefresh() {
+      if (webhookRefreshTimer) clearInterval(webhookRefreshTimer);
+      webhookRefreshTimer = null;
+    }
+
+    function startWebhookAutoRefresh() {
+      stopWebhookAutoRefresh();
+      webhookRefreshTimer = setInterval(() => {
+        // Prevent overlapping requests if the API is slow.
+        if (!webhookStatusInFlight) loadWebhookStatus();
+      }, WEBHOOK_STATUS_REFRESH_MS);
     }
 
     async function loadWebhookSubscriptions() {
@@ -1107,6 +1132,7 @@
           loadPreferences();
           loadHistory();
           loadWebhookStatus();
+          startWebhookAutoRefresh();
         } else {
           statusEl.textContent = (r.status === 401)
             ? 'Session expired or not connected. Connect Oura to continue.'
@@ -1118,6 +1144,7 @@
           prefsCard.style.display = 'none';
           historyCard.style.display = 'none';
           if (webhookStatusEl) webhookStatusEl.style.display = 'none';
+          stopWebhookAutoRefresh();
           onboardingBody.classList.remove('collapsed');
           onboardingToggle.textContent = 'Hide';
           onboardingToggle.setAttribute('aria-expanded', 'true');
@@ -1130,6 +1157,7 @@
         biometricsCard.style.display = 'none';
         prefsCard.style.display = 'none';
         if (webhookStatusEl) webhookStatusEl.style.display = 'none';
+        stopWebhookAutoRefresh();
       }
     }
 
