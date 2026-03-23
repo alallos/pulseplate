@@ -928,8 +928,11 @@
     let lastPlan = null;
     let toastTimer = null;
     let webhookRefreshTimer = null;
+    let webhookPillClockTimer = null;
     let webhookStatusInFlight = false;
+    let webhookPillMeta = null;
     const WEBHOOK_STATUS_REFRESH_MS = 60 * 1000; // keep webhook status fresh while the page stays open
+    const WEBHOOK_PILL_CLOCK_MS = 15 * 1000; // client-side "min ago" tick (does not depend on refetch)
     const WEBHOOK_FETCH_TIMEOUT_MS = 15000;
 
     function fetchWithTimeout(url, options) {
@@ -937,6 +940,40 @@
       const t = setTimeout(() => c.abort(), WEBHOOK_FETCH_TIMEOUT_MS);
       const merged = Object.assign({}, options, { signal: c.signal });
       return fetch(url, merged).finally(() => clearTimeout(t));
+    }
+
+    function renderWebhookPillFromClock() {
+      if (!webhookStatusEl || !webhookPillMeta) return;
+      if (webhookPillMeta.kind === 'waiting') {
+        webhookStatusEl.classList.remove('loading', 'error', 'connected');
+        webhookStatusEl.classList.add('loading');
+        webhookStatusEl.textContent = 'Webhook connected' + webhookPillMeta.typeSuffix + ' · waiting for first event';
+        return;
+      }
+      if (webhookPillMeta.kind !== 'aged') return;
+      const dt = new Date(webhookPillMeta.iso);
+      const ageMin = Math.round((Date.now() - dt.getTime()) / 60000);
+      if (Number.isNaN(ageMin)) {
+        webhookStatusEl.classList.remove('loading', 'error', 'connected');
+        webhookStatusEl.classList.add('connected');
+        webhookStatusEl.textContent = 'Webhook received' + webhookPillMeta.typeSuffix;
+        return;
+      }
+      const isActive = ageMin <= 120;
+      webhookStatusEl.classList.remove('loading', 'error', 'connected');
+      webhookStatusEl.classList.add(isActive ? 'connected' : 'error');
+      webhookStatusEl.textContent =
+        (isActive ? 'Webhook active' : 'Webhook inactive') + webhookPillMeta.typeSuffix + ' · ' + ageMin + ' min ago';
+    }
+
+    function startWebhookPillClock() {
+      stopWebhookPillClock();
+      webhookPillClockTimer = setInterval(renderWebhookPillFromClock, WEBHOOK_PILL_CLOCK_MS);
+    }
+
+    function stopWebhookPillClock() {
+      if (webhookPillClockTimer) clearInterval(webhookPillClockTimer);
+      webhookPillClockTimer = null;
     }
 
     function setPlanMode(mode) {
@@ -975,9 +1012,12 @@
       if (webhookStatusInFlight) return;
       webhookStatusInFlight = true;
       webhookStatusEl.style.display = 'inline-flex';
-      webhookStatusEl.classList.add('loading');
-      webhookStatusEl.classList.remove('connected', 'error');
-      webhookStatusEl.textContent = 'Webhook: checking…';
+      const isFirstPoll = !webhookPillMeta;
+      if (isFirstPoll) {
+        webhookStatusEl.classList.add('loading');
+        webhookStatusEl.classList.remove('connected', 'error');
+        webhookStatusEl.textContent = 'Webhook: checking…';
+      }
       try {
         const r = await fetchWithTimeout('/webhooks/oura/status?ts=' + Date.now(), {
           credentials: 'include',
@@ -989,6 +1029,7 @@
             webhookStatusEl.style.display = 'none';
             if (webhookEventsWrap) webhookEventsWrap.style.display = 'none';
             if (webhookSubscriptionsEl) webhookSubscriptionsEl.style.display = 'none';
+            webhookPillMeta = null;
             stopWebhookAutoRefresh();
             return;
           }
@@ -1003,6 +1044,7 @@
 
         const data = await r.json();
         if (!data.connected) {
+          webhookPillMeta = null;
           webhookStatusEl.classList.remove('loading');
           webhookStatusEl.classList.add('error');
           webhookStatusEl.textContent = 'Webhook: not connected';
@@ -1016,25 +1058,13 @@
         const lastType = data.last_event_type ? (' (' + data.last_event_type + ')') : '';
 
         if (!lastAt) {
-          webhookStatusEl.classList.remove('loading');
-          webhookStatusEl.classList.add('loading');
-          webhookStatusEl.textContent = 'Webhook connected' + lastType + ' · waiting for first event';
+          webhookPillMeta = { kind: 'waiting', typeSuffix: lastType };
+          renderWebhookPillFromClock();
           return;
         }
 
-        const dt = new Date(lastAt);
-        const ageMin = Math.round((Date.now() - dt.getTime()) / 60000);
-        if (Number.isNaN(ageMin)) {
-          webhookStatusEl.classList.remove('loading');
-          webhookStatusEl.classList.add('connected');
-          webhookStatusEl.textContent = 'Webhook received' + lastType;
-          return;
-        }
-
-        const isActive = ageMin <= 120;
-        webhookStatusEl.classList.remove('loading', 'error', 'connected');
-        webhookStatusEl.classList.add(isActive ? 'connected' : 'error');
-        webhookStatusEl.textContent = (isActive ? 'Webhook active' : 'Webhook inactive') + lastType + ' · ' + ageMin + ' min ago';
+        webhookPillMeta = { kind: 'aged', iso: String(lastAt), typeSuffix: lastType };
+        renderWebhookPillFromClock();
       } catch (_) {
         webhookStatusEl.classList.remove('loading');
         webhookStatusEl.classList.add('error');
@@ -1057,14 +1087,19 @@
     function stopWebhookAutoRefresh() {
       if (webhookRefreshTimer) clearInterval(webhookRefreshTimer);
       webhookRefreshTimer = null;
+      stopWebhookPillClock();
+      webhookPillMeta = null;
     }
 
     function startWebhookAutoRefresh() {
-      stopWebhookAutoRefresh();
+      // Do not call stopWebhookAutoRefresh() here — it clears webhookPillMeta and would race with
+      // the async loadWebhookStatus() that checkConnection kicks off in the same tick.
+      if (webhookRefreshTimer) clearInterval(webhookRefreshTimer);
       webhookRefreshTimer = setInterval(() => {
-        // Prevent overlapping requests if the API is slow.
         if (!webhookStatusInFlight) loadWebhookStatus();
       }, WEBHOOK_STATUS_REFRESH_MS);
+      stopWebhookPillClock();
+      startWebhookPillClock();
     }
 
     async function loadWebhookSubscriptions() {
