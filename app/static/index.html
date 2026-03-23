@@ -932,7 +932,8 @@
     let webhookStatusInFlight = false;
     let webhookPillMeta = null;
     const WEBHOOK_STATUS_REFRESH_MS = 60 * 1000; // keep webhook status fresh while the page stays open
-    const WEBHOOK_PILL_CLOCK_MS = 15 * 1000; // client-side "min ago" tick (does not depend on refetch)
+    const WEBHOOK_PILL_CLOCK_MS = 5 * 1000; // tick often so age text changes (whole "min" rounds look frozen ~60s)
+    const WEBHOOK_ACTIVE_MAX_MS = 120 * 60 * 1000; // match prior "active if <= 120 min" but use real ms
     const WEBHOOK_FETCH_TIMEOUT_MS = 15000;
 
     function fetchWithTimeout(url, options) {
@@ -940,6 +941,30 @@
       const t = setTimeout(() => c.abort(), WEBHOOK_FETCH_TIMEOUT_MS);
       const merged = Object.assign({}, options, { signal: c.signal });
       return fetch(url, merged).finally(() => clearTimeout(t));
+    }
+
+    function webhookAgeLabelForIso(iso) {
+      const dt = new Date(iso);
+      const t = dt.getTime();
+      if (Number.isNaN(t)) return null;
+      const ms = Date.now() - t;
+      if (Number.isNaN(ms)) return null;
+      const secTotal = Math.max(0, Math.floor(ms / 1000));
+      let label;
+      if (secTotal < 90) {
+        label = secTotal + 's ago';
+      } else if (secTotal < 3600) {
+        const m = Math.floor(secTotal / 60);
+        const s = secTotal % 60;
+        label = m + 'm ' + s + 's ago';
+      } else if (secTotal < 48 * 3600) {
+        const h = Math.floor(secTotal / 3600);
+        const m = Math.floor((secTotal % 3600) / 60);
+        label = h + 'h ' + m + 'm ago';
+      } else {
+        label = Math.floor(secTotal / 86400) + 'd ago';
+      }
+      return { ms, label };
     }
 
     function renderWebhookPillFromClock() {
@@ -951,23 +976,23 @@
         return;
       }
       if (webhookPillMeta.kind !== 'aged') return;
-      const dt = new Date(webhookPillMeta.iso);
-      const ageMin = Math.round((Date.now() - dt.getTime()) / 60000);
-      if (Number.isNaN(ageMin)) {
+      const parts = webhookAgeLabelForIso(webhookPillMeta.iso);
+      if (!parts) {
         webhookStatusEl.classList.remove('loading', 'error', 'connected');
         webhookStatusEl.classList.add('connected');
         webhookStatusEl.textContent = 'Webhook received' + webhookPillMeta.typeSuffix;
         return;
       }
-      const isActive = ageMin <= 120;
+      const isActive = parts.ms <= WEBHOOK_ACTIVE_MAX_MS;
       webhookStatusEl.classList.remove('loading', 'error', 'connected');
       webhookStatusEl.classList.add(isActive ? 'connected' : 'error');
       webhookStatusEl.textContent =
-        (isActive ? 'Webhook active' : 'Webhook inactive') + webhookPillMeta.typeSuffix + ' · ' + ageMin + ' min ago';
+        (isActive ? 'Webhook active' : 'Webhook inactive') + webhookPillMeta.typeSuffix + ' · last event ' + parts.label;
     }
 
     function startWebhookPillClock() {
       stopWebhookPillClock();
+      renderWebhookPillFromClock();
       webhookPillClockTimer = setInterval(renderWebhookPillFromClock, WEBHOOK_PILL_CLOCK_MS);
     }
 
@@ -975,6 +1000,10 @@
       if (webhookPillClockTimer) clearInterval(webhookPillClockTimer);
       webhookPillClockTimer = null;
     }
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) renderWebhookPillFromClock();
+    });
 
     function setPlanMode(mode) {
       planMode = mode;
