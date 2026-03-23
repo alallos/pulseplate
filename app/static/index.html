@@ -930,6 +930,14 @@
     let webhookRefreshTimer = null;
     let webhookStatusInFlight = false;
     const WEBHOOK_STATUS_REFRESH_MS = 60 * 1000; // keep webhook status fresh while the page stays open
+    const WEBHOOK_FETCH_TIMEOUT_MS = 15000;
+
+    function fetchWithTimeout(url, options) {
+      const c = new AbortController();
+      const t = setTimeout(() => c.abort(), WEBHOOK_FETCH_TIMEOUT_MS);
+      const merged = Object.assign({}, options, { signal: c.signal });
+      return fetch(url, merged).finally(() => clearTimeout(t));
+    }
 
     function setPlanMode(mode) {
       planMode = mode;
@@ -971,7 +979,7 @@
       webhookStatusEl.classList.remove('connected', 'error');
       webhookStatusEl.textContent = 'Webhook: checking…';
       try {
-        const r = await fetch('/webhooks/oura/status?ts=' + Date.now(), {
+        const r = await fetchWithTimeout('/webhooks/oura/status?ts=' + Date.now(), {
           credentials: 'include',
           cache: 'no-store',
           headers: { 'Cache-Control': 'no-cache' },
@@ -1004,8 +1012,6 @@
           return;
         }
 
-        await loadWebhookSubscriptions();
-
         const lastAt = data.last_event_at;
         const lastType = data.last_event_type ? (' (' + data.last_event_type + ')') : '';
 
@@ -1013,7 +1019,6 @@
           webhookStatusEl.classList.remove('loading');
           webhookStatusEl.classList.add('loading');
           webhookStatusEl.textContent = 'Webhook connected' + lastType + ' · waiting for first event';
-          await loadWebhookEvents();
           return;
         }
 
@@ -1023,7 +1028,6 @@
           webhookStatusEl.classList.remove('loading');
           webhookStatusEl.classList.add('connected');
           webhookStatusEl.textContent = 'Webhook received' + lastType;
-          await loadWebhookEvents();
           return;
         }
 
@@ -1031,7 +1035,6 @@
         webhookStatusEl.classList.remove('loading', 'error', 'connected');
         webhookStatusEl.classList.add(isActive ? 'connected' : 'error');
         webhookStatusEl.textContent = (isActive ? 'Webhook active' : 'Webhook inactive') + lastType + ' · ' + ageMin + ' min ago';
-        await loadWebhookEvents();
       } catch (_) {
         webhookStatusEl.classList.remove('loading');
         webhookStatusEl.classList.add('error');
@@ -1040,8 +1043,15 @@
         // Keep timer running; next tick may succeed.
       }
       finally {
+        // Always release before subscriptions/events — a slow/hung secondary fetch must not block the next poll.
         webhookStatusInFlight = false;
       }
+      try {
+        await loadWebhookSubscriptions();
+      } catch (_) {}
+      try {
+        await loadWebhookEvents();
+      } catch (_) {}
     }
 
     function stopWebhookAutoRefresh() {
@@ -1061,7 +1071,10 @@
       if (!webhookSubscriptionsEl) return;
       webhookSubscriptionsEl.style.display = 'none';
       try {
-        const r = await fetch('/webhooks/oura/subscriptions', { credentials: 'include' });
+        const r = await fetchWithTimeout('/webhooks/oura/subscriptions?ts=' + Date.now(), {
+          credentials: 'include',
+          cache: 'no-store',
+        });
         if (!r.ok) return;
         const data = await r.json();
         const subs = Array.isArray(data.subscriptions) ? data.subscriptions : [];
@@ -1088,7 +1101,10 @@
     async function loadWebhookEvents() {
       if (!webhookEventsWrap || !webhookEventsList) return;
       try {
-        const r = await fetch('/webhooks/oura/events?limit=5', { credentials: 'include' });
+        const r = await fetchWithTimeout('/webhooks/oura/events?limit=5&ts=' + Date.now(), {
+          credentials: 'include',
+          cache: 'no-store',
+        });
         if (!r.ok) {
           webhookEventsWrap.style.display = 'none';
           return;
