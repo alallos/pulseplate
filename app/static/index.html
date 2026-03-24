@@ -607,6 +607,37 @@
       flex-wrap: wrap;
       gap: 0.5rem;
     }
+    .beta-feedback-card {
+      margin-top: 0.85rem;
+      padding: 0.75rem 0.85rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+    }
+    .beta-feedback-title {
+      font-size: 0.84rem;
+      color: var(--text);
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+    }
+    .beta-feedback-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin-bottom: 0.45rem;
+    }
+    .beta-feedback-note {
+      width: 100%;
+      min-height: 58px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 0.45rem 0.55rem;
+      font-size: 0.84rem;
+      resize: vertical;
+      margin-bottom: 0.4rem;
+    }
     .onboarding-body { overflow: hidden; transition: opacity 0.2s ease; }
     .onboarding-body.collapsed { display: none; }
     .onboarding-body ul { margin: 0.5rem 0 1rem 1.25rem; padding: 0; }
@@ -922,6 +953,15 @@
       <div id="planFeedbackHint" style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--muted);">
         Rate meals with 👍/👎 so the next plan better matches your taste.
       </div>
+      <div id="betaFeedbackCard" class="beta-feedback-card" style="display:none;">
+        <div class="beta-feedback-title">Quick beta check-in</div>
+        <div class="beta-feedback-actions">
+          <button type="button" class="feedback-btn" id="betaFeedbackGood">Going great</button>
+          <button type="button" class="feedback-btn" id="betaFeedbackOkay">Needs work</button>
+        </div>
+        <textarea id="betaFeedbackNote" class="beta-feedback-note" placeholder="Optional: what would make this better?"></textarea>
+        <button type="button" class="secondary" id="betaFeedbackSendBtn">Send feedback</button>
+      </div>
     </div>
 
     <div class="footer-links" role="contentinfo">
@@ -966,6 +1006,11 @@
     const planMealsWrap = document.getElementById('planMealsWrap');
     const planWeeklyWrap = document.getElementById('planWeeklyWrap');
     const planGrocery = document.getElementById('planGrocery');
+    const betaFeedbackCard = document.getElementById('betaFeedbackCard');
+    const betaFeedbackGood = document.getElementById('betaFeedbackGood');
+    const betaFeedbackOkay = document.getElementById('betaFeedbackOkay');
+    const betaFeedbackNote = document.getElementById('betaFeedbackNote');
+    const betaFeedbackSendBtn = document.getElementById('betaFeedbackSendBtn');
     const messageEl = document.getElementById('message');
     const modeDaily = document.getElementById('modeDaily');
     const modeWeekly = document.getElementById('modeWeekly');
@@ -997,8 +1042,11 @@
     let lastPlan = null;
     let toastTimer = null;
     let hasConnectedSession = false;
+    let betaFeedbackSent = false;
+    let betaFeedbackSentiment = '';
     const FEEDBACK_KEY = 'pulseplate_meal_feedback_v1';
     const QUICK_PREFS_KEY = 'pulseplate_quick_prefs_v1';
+    const BETA_FEEDBACK_SENT_KEY = 'pulseplate_beta_feedback_sent_v1';
 
     function hideBiometricsFetchedAt() {
       const el = document.getElementById('biometricsFetchedAt');
@@ -1055,6 +1103,21 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ event, props: props || {} }),
       }).catch(() => {});
+    }
+
+    function updateBetaFeedbackButtons() {
+      if (!betaFeedbackGood || !betaFeedbackOkay) return;
+      betaFeedbackGood.classList.toggle('active', betaFeedbackSentiment === 'good');
+      betaFeedbackOkay.classList.toggle('active', betaFeedbackSentiment === 'okay');
+    }
+
+    function maybeShowBetaFeedbackCard() {
+      if (!betaFeedbackCard) return;
+      if (betaFeedbackSent) {
+        betaFeedbackCard.style.display = 'none';
+        return;
+      }
+      betaFeedbackCard.style.display = 'block';
     }
 
     function normalizeMealName(name) {
@@ -1218,6 +1281,7 @@
           loadPreferences();
           loadHistory();
           loadMealFeedbackFromServer();
+          maybeShowBetaFeedbackCard();
         } else {
           hasConnectedSession = false;
           trackEvent('connect_status_not_connected', { status_code: r.status });
@@ -1979,6 +2043,47 @@
         }
       });
     }
+    if (betaFeedbackGood) {
+      betaFeedbackGood.addEventListener('click', () => {
+        betaFeedbackSentiment = 'good';
+        updateBetaFeedbackButtons();
+      });
+    }
+    if (betaFeedbackOkay) {
+      betaFeedbackOkay.addEventListener('click', () => {
+        betaFeedbackSentiment = 'okay';
+        updateBetaFeedbackButtons();
+      });
+    }
+    if (betaFeedbackSendBtn) {
+      betaFeedbackSendBtn.addEventListener('click', async () => {
+        const note = (betaFeedbackNote && betaFeedbackNote.value ? betaFeedbackNote.value : '').trim();
+        if (!betaFeedbackSentiment && !note) {
+          showMessage('Choose a quick sentiment or add a note first.', 'error');
+          return;
+        }
+        try {
+          const msg = `[beta_feedback] sentiment=${betaFeedbackSentiment || 'unspecified'} note=${note || '(none)'}`;
+          const r = await fetch('/support/report-issue', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg, page: window.location.pathname, app_version: 'web' }),
+          });
+          if (!r.ok) {
+            showMessage('Could not send feedback. Please try again.', 'error');
+            return;
+          }
+          betaFeedbackSent = true;
+          try { localStorage.setItem(BETA_FEEDBACK_SENT_KEY, '1'); } catch (_) {}
+          trackEvent('beta_feedback_submitted', { sentiment: betaFeedbackSentiment || 'unspecified' });
+          maybeShowBetaFeedbackCard();
+          showMessage('Thanks for the beta feedback.', 'success');
+        } catch (_) {
+          showMessage('Could not send feedback. Please try again.', 'error');
+        }
+      });
+    }
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
@@ -2013,6 +2118,9 @@
         saveQuickPrefs();
       });
     }
+    try { betaFeedbackSent = localStorage.getItem(BETA_FEEDBACK_SENT_KEY) === '1'; } catch (_) {}
+    updateBetaFeedbackButtons();
+    maybeShowBetaFeedbackCard();
     applySavedQuickPrefs();
     checkConnection();
   </script>
