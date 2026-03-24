@@ -30,6 +30,10 @@ class BiometricData(BaseModel):
         default=None,
         description="Optional natural-language summary of the last 7 days (readiness, sleep, activity trends).",
     )
+    plan_preferences: Optional[List[str]] = Field(
+        default=None,
+        description="Optional short preference notes to steer plan generation (e.g. 'faster meals', 'more protein').",
+    )
 
 
 class MealPlanFromOuraOverrides(BaseModel):
@@ -42,6 +46,10 @@ class MealPlanFromOuraOverrides(BaseModel):
     measurement_system: str = Field(
         default="us",
         description="'us' (cups, oz, lb) or 'metric' (g, kg, ml, L)",
+    )
+    plan_preferences: Optional[List[str]] = Field(
+        default=None,
+        description="Optional short preference notes for this generation request.",
     )
 
 

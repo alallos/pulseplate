@@ -48,7 +48,8 @@ Rules:
 - Units: If the user's measurement_system is "us", use US customary units for all quantities (cups, fl oz, lb, oz, tbsp, tsp). If "metric", use metric (g, kg, ml, L). Apply to both meal descriptions and grocery_list quantities.
 - Respect allergies strictly (e.g. if nuts: zero tree nuts or peanuts).
 - Total meal calories should be close to the user's calorie_target.
-- Diet style (mediterranean, keto, etc.) and goals (fat_loss, stable_glucose, etc.) must shape the plan."""
+- Diet style (mediterranean, keto, etc.) and goals (fat_loss, stable_glucose, etc.) must shape the plan.
+- If plan_preferences is provided, treat each item as a high-priority user instruction."""
 
 # Weekly batch plan: JSON schema for Grok
 WEEKLY_MEAL_PLAN_JSON_SCHEMA = """
@@ -80,6 +81,7 @@ Rules:
 - Units: If the user's measurement_system is "us", use US customary units (cups, fl oz, lb, oz, tbsp, tsp) for all quantities in days and grocery_list. If "metric", use metric (g, kg, ml, L).
 - Batch-friendly: recipes that scale, store well, reheat well; shared bases (e.g. large batch of grilled chicken, lentil soup, roasted veggies).
 - Respect allergies strictly. Match diet_style and goals. Target calorie_target per day.
+- If plan_preferences is provided, treat each item as a high-priority user instruction.
 """
 
 

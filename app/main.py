@@ -629,7 +629,7 @@ async def generate_meal_plan_from_oura(
     saved = get_user_preferences(user_id)
     use_saved = overrides is None or (
         (overrides.goals == [] and overrides.diet_style == "balanced"
-         and overrides.calorie_target == 2000 and overrides.allergies is None)
+         and overrides.calorie_target == 2000 and overrides.allergies is None and overrides.plan_preferences is None)
     )
     if use_saved:
         o = MealPlanFromOuraOverrides(
@@ -638,6 +638,7 @@ async def generate_meal_plan_from_oura(
             calorie_target=saved["calorie_target"],
             allergies=saved["allergies"],
             measurement_system=saved.get("measurement_system", "us"),
+            plan_preferences=None,
         )
     else:
         o = overrides or MealPlanFromOuraOverrides()
@@ -650,6 +651,7 @@ async def generate_meal_plan_from_oura(
             "calorie_target": o.calorie_target,
             "allergies": o.allergies if o.allergies is not None else biometrics.allergies,
             "measurement_system": o.measurement_system or biometrics.measurement_system,
+            "plan_preferences": o.plan_preferences if o.plan_preferences is not None else biometrics.plan_preferences,
         }
     )
     if weekly_prep:

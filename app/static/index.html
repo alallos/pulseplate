@@ -542,6 +542,48 @@
       color: var(--muted);
     }
     .grocery-item-weekly .prep { font-size: 0.8rem; color: var(--accent); margin-top: 0.15rem; }
+    .quick-prefs {
+      margin-top: 0.65rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+    }
+    .quick-chip {
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.03);
+      color: var(--muted);
+      padding: 0.35rem 0.6rem;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      cursor: pointer;
+      transition: 0.15s ease;
+    }
+    .quick-chip.active {
+      color: var(--text);
+      border-color: rgba(88, 166, 255, 0.85);
+      background: rgba(88, 166, 255, 0.16);
+    }
+    .meal-feedback {
+      margin-top: 0.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+      flex-wrap: wrap;
+    }
+    .feedback-btn {
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 0.2rem 0.45rem;
+      font-size: 0.72rem;
+      cursor: pointer;
+    }
+    .feedback-btn.active {
+      color: var(--text);
+      border-color: rgba(88, 166, 255, 0.75);
+      background: rgba(88, 166, 255, 0.16);
+    }
     .grocery-actions {
       margin-top: 0.75rem;
       display: flex;
@@ -692,6 +734,10 @@
         <p>We store your Oura tokens (to fetch your data), your saved preferences, and your generated meal plans so you can revisit them. We do not sell your data.</p>
         <h3>Your control</h3>
         <p>You can <strong>Disconnect Oura</strong> or <strong>Delete my data</strong> anytime from the connection area below (once connected). Disconnecting removes our access to Oura; deleting removes all stored plans and preferences.</p>
+        <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin: 0.35rem 0 0.6rem 0;">
+          <button type="button" class="secondary" id="onboardingConnectBtn">Connect Oura</button>
+          <button type="button" class="secondary" id="onboardingPrefsBtn">Set preferences</button>
+        </div>
         <p class="privacy-inline">
           For details, see <a href="/privacy">privacy & deletion policy</a>.
         </p>
@@ -722,6 +768,12 @@
             </select>
           </div>
           <button type="button" class="primary" id="getPlanBtn">Get today's plan</button>
+        </div>
+        <div id="quickPrefs" class="quick-prefs" aria-label="Quick plan adjustments">
+          <button type="button" class="quick-chip" data-pref="more protein">More protein</button>
+          <button type="button" class="quick-chip" data-pref="lower carb meals">Lower carbs</button>
+          <button type="button" class="quick-chip" data-pref="budget-friendly meals">Cheaper meals</button>
+          <button type="button" class="quick-chip" data-pref="faster prep meals">Less prep time</button>
         </div>
       </div>
     </div>
@@ -818,6 +870,9 @@
         <button type="button" class="secondary" id="shareFullPlanBtn">Share full plan</button>
         <button type="button" class="secondary" id="downloadFullPlanBtn">Download full plan .txt</button>
       </div>
+      <div id="planFeedbackHint" style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--muted);">
+        Rate meals with 👍/👎 so the next plan better matches your taste.
+      </div>
     </div>
 
     <div class="footer-links" role="contentinfo">
@@ -875,6 +930,8 @@
     const onboardingCard = document.getElementById('onboardingCard');
     const onboardingBody = document.getElementById('onboardingBody');
     const onboardingToggle = document.getElementById('onboardingToggle');
+    const onboardingConnectBtn = document.getElementById('onboardingConnectBtn');
+    const onboardingPrefsBtn = document.getElementById('onboardingPrefsBtn');
     const copyGroceryWrap = document.getElementById('copyGroceryWrap');
     const copyGroceryBtn = document.getElementById('copyGroceryBtn');
     const shareGroceryBtn = document.getElementById('shareGroceryBtn');
@@ -882,11 +939,14 @@
     const copyFullPlanBtn = document.getElementById('copyFullPlanBtn');
     const shareFullPlanBtn = document.getElementById('shareFullPlanBtn');
     const downloadFullPlanBtn = document.getElementById('downloadFullPlanBtn');
+    const quickPrefs = document.getElementById('quickPrefs');
 
     let planMode = 'daily';
     let lastGroceryList = [];
     let lastPlan = null;
     let toastTimer = null;
+    const FEEDBACK_KEY = 'pulseplate_meal_feedback_v1';
+    const QUICK_PREFS_KEY = 'pulseplate_quick_prefs_v1';
 
     function hideBiometricsFetchedAt() {
       const el = document.getElementById('biometricsFetchedAt');
@@ -935,6 +995,114 @@
       return now.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
     }
 
+    function normalizeMealName(name) {
+      return String(name || '').trim().toLowerCase();
+    }
+
+    function readMealFeedback() {
+      try {
+        const raw = localStorage.getItem(FEEDBACK_KEY);
+        const parsed = raw ? JSON.parse(raw) : {};
+        return (parsed && typeof parsed === 'object') ? parsed : {};
+      } catch (_) {
+        return {};
+      }
+    }
+
+    function writeMealFeedback(obj) {
+      try {
+        localStorage.setItem(FEEDBACK_KEY, JSON.stringify(obj || {}));
+      } catch (_) {}
+    }
+
+    function setMealFeedback(name, sentiment) {
+      const key = normalizeMealName(name);
+      if (!key) return;
+      const all = readMealFeedback();
+      if (!sentiment) delete all[key];
+      else all[key] = sentiment;
+      writeMealFeedback(all);
+    }
+
+    function getMealFeedback(name) {
+      const all = readMealFeedback();
+      return all[normalizeMealName(name)] || null;
+    }
+
+    function getActiveQuickPrefs() {
+      if (!quickPrefs) return [];
+      const chips = Array.from(quickPrefs.querySelectorAll('.quick-chip.active'));
+      return chips.map(c => c.getAttribute('data-pref')).filter(Boolean);
+    }
+
+    function applySavedQuickPrefs() {
+      if (!quickPrefs) return;
+      let selected = [];
+      try {
+        selected = JSON.parse(localStorage.getItem(QUICK_PREFS_KEY) || '[]');
+      } catch (_) {}
+      const set = new Set(Array.isArray(selected) ? selected : []);
+      quickPrefs.querySelectorAll('.quick-chip').forEach(chip => {
+        const pref = chip.getAttribute('data-pref');
+        chip.classList.toggle('active', set.has(pref));
+      });
+    }
+
+    function saveQuickPrefs() {
+      try {
+        localStorage.setItem(QUICK_PREFS_KEY, JSON.stringify(getActiveQuickPrefs()));
+      } catch (_) {}
+    }
+
+    function buildPreferenceNotes() {
+      const notes = [];
+      getActiveQuickPrefs().forEach(p => notes.push(p));
+      const feedback = readMealFeedback();
+      const liked = [];
+      const disliked = [];
+      Object.keys(feedback).forEach(name => {
+        if (feedback[name] === 'up') liked.push(name);
+        if (feedback[name] === 'down') disliked.push(name);
+      });
+      if (liked.length) notes.push('Favor similar meals to: ' + liked.slice(0, 4).join(', '));
+      if (disliked.length) notes.push('Avoid meals like: ' + disliked.slice(0, 4).join(', '));
+      return notes;
+    }
+
+    function makeMealFeedbackControls(mealName) {
+      const current = getMealFeedback(mealName);
+      const wrap = document.createElement('div');
+      wrap.className = 'meal-feedback';
+      const label = document.createElement('span');
+      label.style.color = 'var(--muted)';
+      label.style.fontSize = '0.72rem';
+      label.textContent = 'Helpful?';
+      const up = document.createElement('button');
+      up.type = 'button';
+      up.className = 'feedback-btn' + (current === 'up' ? ' active' : '');
+      up.textContent = '👍';
+      const down = document.createElement('button');
+      down.type = 'button';
+      down.className = 'feedback-btn' + (current === 'down' ? ' active' : '');
+      down.textContent = '👎';
+      up.addEventListener('click', () => {
+        const next = getMealFeedback(mealName) === 'up' ? null : 'up';
+        setMealFeedback(mealName, next);
+        up.classList.toggle('active', next === 'up');
+        down.classList.remove('active');
+      });
+      down.addEventListener('click', () => {
+        const next = getMealFeedback(mealName) === 'down' ? null : 'down';
+        setMealFeedback(mealName, next);
+        down.classList.toggle('active', next === 'down');
+        up.classList.remove('active');
+      });
+      wrap.appendChild(label);
+      wrap.appendChild(up);
+      wrap.appendChild(down);
+      return wrap;
+    }
+
     async function checkConnection() {
       statusEl.classList.add('loading');
       statusEl.classList.remove('connected', 'error');
@@ -965,6 +1133,7 @@
           biometricsCard.style.display = 'none';
           prefsCard.style.display = 'none';
           historyCard.style.display = 'none';
+          planResult.classList.remove('visible');
           onboardingBody.classList.remove('collapsed');
           onboardingToggle.textContent = 'Hide';
           onboardingToggle.setAttribute('aria-expanded', 'true');
@@ -976,6 +1145,8 @@
         actionsEl.style.display = 'none';
         biometricsCard.style.display = 'none';
         prefsCard.style.display = 'none';
+        historyCard.style.display = 'none';
+        planResult.classList.remove('visible');
       }
     }
 
@@ -1046,14 +1217,18 @@
           biometricsActions.style.display = 'block';
           updateBiometricsFetchedAt();
         } else {
-          biometricsContent.textContent = 'Could not load biometrics. ' + (data.detail || r.statusText);
+          biometricsContent.innerHTML = 'Could not load biometrics. ' + (data.detail || r.statusText) + ' <button type="button" class="secondary" id="retryBiometricsBtn">Try again</button>';
           biometricsContent.classList.add('error');
           hideBiometricsFetchedAt();
+          const retry = document.getElementById('retryBiometricsBtn');
+          if (retry) retry.addEventListener('click', () => loadBiometrics());
         }
       } catch (e) {
-        biometricsContent.textContent = 'Failed to load biometrics.';
+        biometricsContent.innerHTML = 'Failed to load biometrics. <button type="button" class="secondary" id="retryBiometricsBtn">Try again</button>';
         biometricsContent.classList.add('error');
         hideBiometricsFetchedAt();
+        const retry = document.getElementById('retryBiometricsBtn');
+        if (retry) retry.addEventListener('click', () => loadBiometrics());
       }
     }
 
@@ -1223,6 +1398,7 @@
           '<span class="meal-name">' + (m.name || '') + '</span>' +
           (m.calories ? '<span class="meal-cal"> · ' + m.calories + ' kcal</span>' : '') +
           (m.description ? '<p class="meal-desc">' + m.description + '</p>' : '');
+        div.appendChild(makeMealFeedbackControls(m.name || ''));
         planMeals.appendChild(div);
       });
       lastGroceryList = data.grocery_list || [];
@@ -1262,6 +1438,10 @@
             '</div>';
         });
         dayBlock.innerHTML = '<h4>' + (dayObj.day || '') + '</h4>' + mealsHtml;
+        Array.from(dayBlock.querySelectorAll('.meal')).forEach((mealEl, idx) => {
+          const meal = (dayObj.meals || [])[idx] || {};
+          mealEl.appendChild(makeMealFeedbackControls(meal.name || ''));
+        });
         planWeeklyWrap.appendChild(dayBlock);
       });
       lastGroceryList = data.grocery_list || [];
@@ -1594,7 +1774,7 @@
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ plan_preferences: buildPreferenceNotes() }),
         });
         let data = {};
         try {
@@ -1676,6 +1856,28 @@
       const d = new Date();
       el.textContent = 'Today, ' + d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
     })();
+    if (onboardingConnectBtn) {
+      onboardingConnectBtn.addEventListener('click', () => {
+        window.location.href = '/auth/oura/authorize';
+      });
+    }
+    if (onboardingPrefsBtn) {
+      onboardingPrefsBtn.addEventListener('click', () => {
+        prefsCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        prefsBody.classList.remove('collapsed');
+        prefsToggle.textContent = 'Hide';
+        prefsToggle.setAttribute('aria-expanded', 'true');
+      });
+    }
+    if (quickPrefs) {
+      quickPrefs.addEventListener('click', (e) => {
+        const target = e.target;
+        if (!target || !target.classList || !target.classList.contains('quick-chip')) return;
+        target.classList.toggle('active');
+        saveQuickPrefs();
+      });
+    }
+    applySavedQuickPrefs();
     checkConnection();
   </script>
 </body>
