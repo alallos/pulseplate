@@ -1,0 +1,19 @@
+{
+  "name": "pulseplate",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Capacitor iOS shell for PulsePlate (loads bundled static assets; override server.url for live backend).",
+  "scripts": {
+    "cap:sync": "cap sync ios",
+    "cap:open:ios": "cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/app": "^6.2.0",
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/ios": "^6.2.0",
+    "@capacitor/status-bar": "^6.2.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.0"
+  }
+}

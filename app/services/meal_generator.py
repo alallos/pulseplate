@@ -10,6 +10,8 @@ import httpx
 from fastapi import HTTPException
 from pydantic import ValidationError
 
+from app.observability import capture_exception as o11y_capture_exception
+from app.observability import capture_message as o11y_capture_message
 from app.models.biometrics import (
     BiometricData,
     DayPlan,
@@ -151,9 +153,11 @@ async def _call_grok_raw(system_content: str, user_content: str) -> Any:
             response = await client.post(GROK_URL, headers=headers, json=payload)
     except httpx.TimeoutException as e:
         logger.warning("Grok API timeout: %s", e)
+        o11y_capture_exception(e, pulseplate_component="grok", grok_error_kind="timeout")
         raise HTTPException(status_code=504, detail=f"Grok API timeout: {e!s}") from e
     except httpx.RequestError as e:
         logger.warning("Grok API request failed: %s", e)
+        o11y_capture_exception(e, pulseplate_component="grok", grok_error_kind="request")
         raise HTTPException(status_code=502, detail=f"Grok API request failed: {e!s}") from e
 
     if response.is_error:
@@ -163,6 +167,12 @@ async def _call_grok_raw(system_content: str, user_content: str) -> Any:
         except Exception:
             msg = response.text or f"HTTP {response.status_code}"
         logger.warning("Grok API error response: %s", msg)
+        o11y_capture_message(
+            f"Grok API HTTP {response.status_code}: {msg}",
+            level="error",
+            pulseplate_component="grok",
+            grok_error_kind="http_response",
+        )
         raise HTTPException(
             status_code=response.status_code if 400 <= response.status_code < 600 else 502,
             detail=f"Grok API error: {msg}",
@@ -172,17 +182,31 @@ async def _call_grok_raw(system_content: str, user_content: str) -> Any:
         body = response.json()
         choices = body.get("choices") or []
         if not choices:
+            o11y_capture_message(
+                "Grok API returned no choices",
+                level="error",
+                pulseplate_component="grok",
+                grok_error_kind="empty_choices",
+            )
             raise HTTPException(status_code=502, detail="Grok API returned no choices in response.")
         content = (choices[0].get("message") or {}).get("content") or ""
         if not content.strip():
+            o11y_capture_message(
+                "Grok API returned empty content",
+                level="error",
+                pulseplate_component="grok",
+                grok_error_kind="empty_content",
+            )
             raise HTTPException(status_code=502, detail="Grok API returned empty content.")
     except (KeyError, IndexError, TypeError) as e:
+        o11y_capture_exception(e, pulseplate_component="grok", grok_error_kind="response_shape")
         raise HTTPException(status_code=502, detail=f"Unexpected Grok response shape: {e!s}") from e
 
     try:
         return _extract_json_from_content(content)
     except json.JSONDecodeError as e:
         logger.warning("Grok returned invalid JSON: %s", e)
+        o11y_capture_exception(e, pulseplate_component="grok", grok_error_kind="invalid_json")
         raise HTTPException(status_code=502, detail=f"Grok returned invalid JSON: {e!s}") from e
 
 
@@ -196,6 +220,7 @@ async def generate_meal_plan(data: BiometricData) -> MealPlanResponse:
         return MealPlanResponse.model_validate(parsed)
     except ValidationError as e:
         logger.warning("Grok daily response schema validation failed: %s", e)
+        o11y_capture_exception(e, pulseplate_component="grok", grok_error_kind="daily_schema")
         raise HTTPException(
             status_code=502,
             detail=f"Grok response did not match MealPlanResponse schema: {e!s}",
@@ -219,6 +244,7 @@ async def generate_weekly_meal_plan(data: BiometricData, days: int = 7) -> Weekl
         return WeeklyMealPlanResponse.model_validate(parsed)
     except ValidationError as e:
         logger.warning("Grok weekly response schema validation failed: %s", e)
+        o11y_capture_exception(e, pulseplate_component="grok", grok_error_kind="weekly_schema")
         raise HTTPException(
             status_code=502,
             detail=f"Grok response did not match WeeklyMealPlanResponse schema: {e!s}",

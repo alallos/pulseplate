@@ -76,6 +76,9 @@ cover/
 Pipfile.lock
 poetry.lock  # usually commit this, but ignore if you prefer
 
+# Node (Capacitor iOS wrapper)
+node_modules/
+
 # Deployment / build artifacts
 *.pyc
 *.pyo

@@ -24,6 +24,8 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 import sentry_sdk
 from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.logging import LoggingIntegration
+from sentry_sdk.integrations.starlette import StarletteIntegration
 
 from app.auth import create_session_token, get_current_user_id, CurrentUserId
 from app.models.biometrics import (
@@ -89,10 +91,15 @@ _sentry_dsn = (os.getenv("SENTRY_DSN") or "").strip()
 if _sentry_dsn:
     sentry_sdk.init(
         dsn=_sentry_dsn,
-        integrations=[FastApiIntegration()],
+        integrations=[
+            StarletteIntegration(transaction_style="endpoint"),
+            FastApiIntegration(),
+            LoggingIntegration(level=logging.INFO, event_level=logging.ERROR),
+        ],
         traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.0")),
         profiles_sample_rate=float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.0")),
         environment=os.getenv("SENTRY_ENVIRONMENT") or None,
+        send_default_pii=False,
     )
     log.info("Sentry monitoring enabled")
 else:
@@ -460,7 +467,8 @@ async def oura_callback(
         tokens = await exchange_code_for_tokens(code=code, store=False)
     except HTTPException:
         raise
-    except Exception:
+    except Exception as exc:
+        sentry_capture_exception(exc, pulseplate_flow="oura_oauth_token_exchange")
         return RedirectResponse(url="/?oura_error=token_exchange_failed", status_code=302)
     access_token = tokens["access_token"]
     try:

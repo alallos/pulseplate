@@ -1,0 +1,12 @@
+{
+  "appId": "com.pulseplate.app",
+  "appName": "PulsePlate",
+  "webDir": "app/static",
+  "ios": {
+    "contentInset": "automatic",
+    "allowsLinkPreview": false
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

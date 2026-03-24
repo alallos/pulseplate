@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>PulsePlate – Your pulse → perfect plate</title>
   <meta name="theme-color" content="#0f1419">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
@@ -25,6 +25,9 @@
       --amber: #d4a72c;
     }
     * { box-sizing: border-box; }
+    html {
+      -webkit-text-size-adjust: 100%;
+    }
     body {
       font-family: "Segoe UI", system-ui, sans-serif;
       background:
@@ -35,7 +38,12 @@
       color: var(--text);
       margin: 0;
       min-height: 100vh;
+      min-height: 100dvh;
       line-height: 1.5;
+      padding-left: env(safe-area-inset-left, 0);
+      padding-right: env(safe-area-inset-right, 0);
+      padding-bottom: env(safe-area-inset-bottom, 0);
+      -webkit-tap-highlight-color: rgba(88, 166, 255, 0.15);
     }
     .container {
       max-width: 560px;
@@ -725,8 +733,44 @@
       white-space: nowrap;
     }
     @media (max-width: 600px) {
+      .form-group input[type="number"],
+      .form-group input[type="text"],
+      .form-group select,
+      .plan-actions select,
+      .beta-feedback-note {
+        font-size: 16px;
+        max-width: 100%;
+      }
+      a.button, button.primary {
+        min-height: 44px;
+        padding-top: 0.65rem;
+        padding-bottom: 0.65rem;
+      }
+      button.secondary {
+        min-height: 44px;
+        padding-top: 0.55rem;
+        padding-bottom: 0.55rem;
+      }
+      .mode-tabs button {
+        min-height: 44px;
+      }
+      .quick-chip {
+        min-height: 40px;
+        padding: 0.45rem 0.75rem;
+        display: inline-flex;
+        align-items: center;
+      }
+      .feedback-btn {
+        min-width: 44px;
+        min-height: 44px;
+        padding: 0.35rem 0.55rem;
+        font-size: 1rem;
+        justify-content: center;
+        align-items: center;
+        display: inline-flex;
+      }
       .container {
-        padding: 1.5rem 1.1rem 2.5rem;
+        padding: 1.5rem 1.1rem calc(2.5rem + env(safe-area-inset-bottom, 0));
       }
       h1 {
         font-size: 1.4rem;
