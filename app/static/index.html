@@ -748,6 +748,15 @@
     <div class="card">
       <div id="status" class="status loading">Checking Oura connection…</div>
       <a id="connectBtn" href="/auth/oura/authorize" class="button" style="display: none;">Connect Oura</a>
+      <div id="quickPrefsWrap" style="margin-bottom: 0.75rem;">
+        <div style="font-size:0.78rem; color: var(--muted); margin-bottom: 0.35rem;">Quick plan preferences</div>
+        <div id="quickPrefs" class="quick-prefs" aria-label="Quick plan adjustments">
+          <button type="button" class="quick-chip" data-pref="more protein">More protein</button>
+          <button type="button" class="quick-chip" data-pref="lower carb meals">Lower carbs</button>
+          <button type="button" class="quick-chip" data-pref="budget-friendly meals">Cheaper meals</button>
+          <button type="button" class="quick-chip" data-pref="faster prep meals">Less prep time</button>
+        </div>
+      </div>
       <div id="actions" style="display: none;">
         <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom: 0.75rem;">
           <button type="button" class="secondary" id="logoutBtn">Log out</button>
@@ -769,13 +778,14 @@
           </div>
           <button type="button" class="primary" id="getPlanBtn">Get today's plan</button>
         </div>
-        <div id="quickPrefs" class="quick-prefs" aria-label="Quick plan adjustments">
-          <button type="button" class="quick-chip" data-pref="more protein">More protein</button>
-          <button type="button" class="quick-chip" data-pref="lower carb meals">Lower carbs</button>
-          <button type="button" class="quick-chip" data-pref="budget-friendly meals">Cheaper meals</button>
-          <button type="button" class="quick-chip" data-pref="faster prep meals">Less prep time</button>
-        </div>
       </div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin-bottom: 0.4rem;">Plan feedback</h2>
+      <p style="margin:0; color:var(--muted); font-size:0.86rem; line-height:1.35;">
+        After a plan is generated, each meal shows <strong>Helpful? 👍 👎</strong> so you can train the next plan.
+      </p>
     </div>
 
     <!-- Today's biometrics (when connected) -->
