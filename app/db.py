@@ -89,6 +89,7 @@ def init_db() -> None:
                     calorie_target INTEGER,
                     allergies TEXT,
                     measurement_system TEXT DEFAULT 'us',
+                    meal_feedback_json TEXT,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
@@ -120,6 +121,10 @@ def init_db() -> None:
                 cur.execute("ALTER TABLE users ADD COLUMN measurement_system TEXT DEFAULT 'us'")
             except Exception:
                 pass
+            try:
+                cur.execute("ALTER TABLE users ADD COLUMN meal_feedback_json TEXT")
+            except Exception:
+                pass
         else:
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS users (
@@ -134,11 +139,12 @@ def init_db() -> None:
                     calorie_target INTEGER,
                     allergies TEXT,
                     measurement_system TEXT,
+                    meal_feedback_json TEXT,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 )
             """)
-            for col in ("email", "oura_user_id", "measurement_system"):
+            for col in ("email", "oura_user_id", "measurement_system", "meal_feedback_json"):
                 try:
                     cur.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
                 except sqlite3.OperationalError:
@@ -527,6 +533,65 @@ def clear_oura_tokens(user_id: int) -> None:
             """),
             (now, user_id),
         )
+
+
+def get_user_meal_feedback(user_id: int = DEFAULT_USER_ID) -> dict[str, str]:
+    """Return saved meal feedback map {meal_name: 'up'|'down'} for this user."""
+    try:
+        with _get_conn() as conn:
+            cur = conn.cursor()
+            cur.execute(_q("SELECT meal_feedback_json FROM users WHERE id = ?"), (user_id,))
+            row = cur.fetchone()
+    except Exception:
+        return {}
+    if not row or not row[0]:
+        return {}
+    try:
+        parsed = json.loads(row[0])
+    except Exception:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    out: dict[str, str] = {}
+    for k, v in parsed.items():
+        if isinstance(k, str) and v in ("up", "down"):
+            out[k] = v
+    return out
+
+
+def set_user_meal_feedback(user_id: int, feedback: dict[str, str]) -> None:
+    """Persist meal feedback map for this user, creating row if needed."""
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    cleaned: dict[str, str] = {}
+    for k, v in (feedback or {}).items():
+        if isinstance(k, str) and v in ("up", "down"):
+            cleaned[k] = v
+    payload = json.dumps(cleaned, separators=(",", ":"), ensure_ascii=False)
+    with _get_conn() as conn:
+        cur = conn.cursor()
+        if _use_pg:
+            cur.execute(
+                _q("UPDATE users SET meal_feedback_json = ?, updated_at = ? WHERE id = ?"),
+                (payload, now, user_id),
+            )
+            if cur.rowcount == 0:
+                cur.execute(
+                    _q("INSERT INTO users (id, meal_feedback_json, created_at, updated_at) VALUES (?, ?, ?, ?)"),
+                    (user_id, payload, now, now),
+                )
+        else:
+            cur.execute(
+                _q(
+                    """
+                    INSERT INTO users (id, meal_feedback_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(id) DO UPDATE SET
+                        meal_feedback_json = excluded.meal_feedback_json,
+                        updated_at = excluded.updated_at
+                    """
+                ),
+                (user_id, payload, now, now),
+            )
 
 
 def delete_user_data(user_id: int) -> None:

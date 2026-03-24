@@ -560,8 +560,10 @@
     }
     .quick-chip.active {
       color: var(--text);
-      border-color: rgba(88, 166, 255, 0.85);
-      background: rgba(88, 166, 255, 0.16);
+      border-color: rgba(88, 166, 255, 1);
+      background: rgba(88, 166, 255, 0.24);
+      box-shadow: 0 0 0 1px rgba(88, 166, 255, 0.35), 0 4px 14px rgba(88, 166, 255, 0.25);
+      transform: translateY(-1px);
     }
     .meal-feedback {
       margin-top: 0.5rem;
@@ -955,6 +957,7 @@
     let lastGroceryList = [];
     let lastPlan = null;
     let toastTimer = null;
+    let hasConnectedSession = false;
     const FEEDBACK_KEY = 'pulseplate_meal_feedback_v1';
     const QUICK_PREFS_KEY = 'pulseplate_quick_prefs_v1';
 
@@ -1032,6 +1035,7 @@
       if (!sentiment) delete all[key];
       else all[key] = sentiment;
       writeMealFeedback(all);
+      saveMealFeedbackToServer();
     }
 
     function getMealFeedback(name) {
@@ -1079,6 +1083,35 @@
       return notes;
     }
 
+    function summarizeAppliedPreferences() {
+      const selected = getActiveQuickPrefs();
+      if (!selected.length) return '';
+      return 'Applied preferences: ' + selected.join(', ');
+    }
+
+    async function loadMealFeedbackFromServer() {
+      if (!hasConnectedSession) return;
+      try {
+        const r = await fetch('/meal-feedback', { credentials: 'include' });
+        if (!r.ok) return;
+        const data = await r.json();
+        const feedback = data && typeof data.feedback === 'object' ? data.feedback : {};
+        writeMealFeedback(feedback || {});
+      } catch (_) {}
+    }
+
+    async function saveMealFeedbackToServer() {
+      if (!hasConnectedSession) return;
+      try {
+        await fetch('/meal-feedback', {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ feedback: readMealFeedback() }),
+        });
+      } catch (_) {}
+    }
+
     function makeMealFeedbackControls(mealName) {
       const current = getMealFeedback(mealName);
       const wrap = document.createElement('div');
@@ -1119,6 +1152,7 @@
       try {
         const r = await fetch('/biometrics/oura', { credentials: 'include' });
         if (r.ok) {
+          hasConnectedSession = true;
           statusEl.textContent = 'Oura connected.';
           statusEl.classList.remove('loading');
           statusEl.classList.add('connected');
@@ -1133,7 +1167,9 @@
           loadBiometrics();
           loadPreferences();
           loadHistory();
+          loadMealFeedbackFromServer();
         } else {
+          hasConnectedSession = false;
           statusEl.textContent = (r.status === 401)
             ? 'Session expired or not connected. Connect Oura to continue.'
             : 'Connect your Oura account to get personalized meal plans.';
@@ -1149,6 +1185,7 @@
           onboardingToggle.setAttribute('aria-expanded', 'true');
         }
       } catch (_) {
+        hasConnectedSession = false;
         statusEl.textContent = 'Connect your Oura account to get personalized meal plans.';
         statusEl.classList.remove('loading');
         connectBtn.style.display = 'inline-block';
@@ -1396,7 +1433,8 @@
       planBadge.style.display = 'none';
       planWeeklyWrap.style.display = 'none';
       planMealsWrap.style.display = 'block';
-      planMeta.textContent = 'Generated at ' + formatGeneratedAt();
+      const applied = summarizeAppliedPreferences();
+      planMeta.textContent = 'Generated at ' + formatGeneratedAt() + (applied ? ' · ' + applied : '');
       planMeta.style.display = 'block';
       planSummary.textContent = data.summary || '';
       planMeals.innerHTML = '<h3>Meals</h3>';
@@ -1430,7 +1468,8 @@
       planBadge.style.display = 'block';
       planMealsWrap.style.display = 'none';
       planWeeklyWrap.style.display = 'block';
-      planMeta.textContent = 'Generated at ' + formatGeneratedAt();
+      const applied = summarizeAppliedPreferences();
+      planMeta.textContent = 'Generated at ' + formatGeneratedAt() + (applied ? ' · ' + applied : '');
       planMeta.style.display = 'block';
       planSummary.textContent = data.summary || '';
       planWeeklyWrap.innerHTML = '';

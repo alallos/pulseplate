@@ -66,6 +66,8 @@ from app.db import (
     get_recent_oura_webhook_events,
     get_oura_webhook_events_count_all_users,
     get_user_oura_user_id,
+    get_user_meal_feedback,
+    set_user_meal_feedback,
 )
 
 # Load environment variables early (even if .env is empty for now)
@@ -539,6 +541,25 @@ async def update_preferences(
         measurement_system=overrides.measurement_system,
     )
     return get_user_preferences(user_id)
+
+
+@app.get("/meal-feedback")
+async def get_meal_feedback(user_id: CurrentUserId):
+    """Return saved meal feedback map for this user."""
+    return {"feedback": get_user_meal_feedback(user_id)}
+
+
+@app.put("/meal-feedback")
+async def update_meal_feedback(
+    user_id: CurrentUserId,
+    payload: dict = Body(..., description="Feedback map, e.g. {'feedback': {'oats':'up'}}"),
+):
+    """Save per-user meal feedback to improve future generation across devices."""
+    feedback = payload.get("feedback", {})
+    if not isinstance(feedback, dict):
+        raise HTTPException(status_code=400, detail="feedback must be an object")
+    set_user_meal_feedback(user_id, feedback)
+    return {"feedback": get_user_meal_feedback(user_id)}
 
 
 @app.get("/biometrics/oura", response_model=BiometricData)

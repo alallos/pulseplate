@@ -1,4 +1,4 @@
-const CACHE_NAME = 'pulseplate-shell-v6';
+const CACHE_NAME = 'pulseplate-shell-v7';
 // Keep this list focused on the "app shell" so we don't accidentally cache stale HTML/JS forever.
 const URLS_TO_CACHE = [
   '/',
