@@ -614,7 +614,7 @@ async def analytics_event(request: Request, payload: dict = Body(..., descriptio
     )
     uid = None
     try:
-        uid = get_current_user_id(request)
+        uid = await get_current_user_id(request)
     except Exception:
         uid = None
     save_beta_analytics_event(user_id=uid, event_name=event.strip()[:80], props=props if isinstance(props, dict) else {})

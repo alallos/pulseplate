@@ -15,9 +15,9 @@
 ## 2) Reliability + Quality
 
 - [ ] Add API tests for:
-  - [ ] Meal feedback endpoints (`GET/PUT /meal-feedback`)
-  - [ ] Plan generation overrides include `plan_preferences`
-  - [ ] Support endpoint (`POST /support/report-issue`)
+  - [x] Meal feedback endpoints (`GET/PUT /meal-feedback`)
+  - [x] Plan generation overrides include `plan_preferences` (`/generate-meal-plan/from-oura`)
+  - [x] Support endpoint (`POST /support/report-issue`)
 - [ ] Ensure no P0/P1 regressions for auth, generation, and history flows.
 - [ ] Confirm service worker cache version bumped for each shell change.
 
@@ -43,8 +43,8 @@
 
 - [ ] Define beta segment (20-40 users to start).
 - [ ] Prepare invite + onboarding copy.
-- [ ] Add in-app feedback prompt after first successful plan generation.
-- [ ] Create issue template for beta feedback collection.
+- [x] Add in-app feedback prompt after first successful plan generation.
+- [x] Create issue template for beta feedback collection (`.github/ISSUE_TEMPLATE/beta-feedback.yml`).
 
 ## 6) Mobile App Track (Parallel)
 

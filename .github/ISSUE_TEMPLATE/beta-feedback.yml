@@ -1,0 +1,49 @@
+name: Beta feedback
+description: Share bugs, UX friction, or ideas from the PulsePlate beta.
+title: "[Beta] "
+labels:
+  - beta-feedback
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying PulsePlate. The more specific you are, the faster we can act.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: One or two sentences — what did you try to do, and what went wrong (or felt confusing)?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce (if a bug)
+      description: Bullet list or numbered steps. "N/A" if not applicable.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Where did this happen?
+      options:
+        - iPhone Safari
+        - Android Chrome
+        - Desktop browser
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: build
+    attributes:
+      label: Optional — build or date
+      description: e.g. TestFlight build, or "approx. date you saw this"
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect instead?
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Diagnostic detail (optional)
+      description: Helping us correlate with logs speeds up fixes.
+      options:
+        - label: I am okay sharing rough timing (e.g. "today ~3pm ET") if you need to match server logs.

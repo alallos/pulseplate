@@ -8,6 +8,13 @@ from fastapi.testclient import TestClient
 import app.main as main_module
 from app.main import app
 from app.auth import create_session_token
+from app.models.biometrics import (
+    BiometricData,
+    DayPlan,
+    GroceryItemWeekly,
+    MealPlanResponse,
+    WeeklyMealPlanResponse,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -216,6 +223,131 @@ def test_generate_meal_plan_weekly_invalid_grok_response_returns_502(mock_call, 
     assert response.status_code == 502
     data = response.json()
     assert data.get("detail", "").startswith("Grok response did not match WeeklyMealPlanResponse schema:")
+
+
+def _sample_biometric_data(**kwargs):
+    base = dict(
+        sleep_score=80,
+        recovery_status="good",
+        hrv_ms=50,
+        resting_hr_bpm=60,
+        steps_yesterday=10000,
+        calorie_target=2000,
+    )
+    base.update(kwargs)
+    return BiometricData(**base)
+
+
+@patch("app.main.save_plan")
+@patch("app.main.generate_meal_plan_service", new_callable=AsyncMock)
+@patch("app.main.fetch_oura_biometrics", new_callable=AsyncMock)
+@patch("app.main.get_valid_access_token", new_callable=AsyncMock)
+def test_generate_meal_plan_from_oura_merges_plan_preferences_from_overrides(
+    mock_token,
+    mock_fetch,
+    mock_gen,
+    mock_save,
+    auth_headers,
+    client,
+):
+    """Overrides.plan_preferences is passed through to the generator merged payload."""
+    mock_token.return_value = "oura-access"
+    mock_fetch.return_value = _sample_biometric_data(plan_preferences=None)
+    mock_gen.return_value = MealPlanResponse(
+        summary="ok",
+        meals=[
+            {"type": "Breakfast", "name": "X", "description": "d", "calories": 1},
+            {"type": "Lunch", "name": "Y", "description": "d", "calories": 1},
+            {"type": "Dinner", "name": "Z", "description": "d", "calories": 1},
+        ],
+        grocery_list=[{"item": "a", "quantity": "1"}],
+    )
+    response = client.post(
+        "/generate-meal-plan/from-oura",
+        headers={**auth_headers, "X-Forwarded-For": "127.0.0.5"},
+        json={"plan_preferences": ["high protein"]},
+    )
+    assert response.status_code == 200
+    mock_gen.assert_called_once()
+    passed = mock_gen.call_args[0][0]
+    assert passed.plan_preferences == ["high protein"]
+    mock_save.assert_called_once()
+
+
+@patch("app.main.save_plan")
+@patch("app.main.generate_meal_plan_service", new_callable=AsyncMock)
+@patch("app.main.fetch_oura_biometrics", new_callable=AsyncMock)
+@patch("app.main.get_valid_access_token", new_callable=AsyncMock)
+def test_generate_meal_plan_from_oura_keeps_ring_plan_preferences_when_override_omits_them(
+    mock_token,
+    mock_fetch,
+    mock_gen,
+    mock_save,
+    auth_headers,
+    client,
+):
+    """When request body does not set plan_preferences, merged data keeps Oura snapshot values."""
+    mock_token.return_value = "oura-access"
+    mock_fetch.return_value = _sample_biometric_data(plan_preferences=["batch cook sunday"])
+    mock_gen.return_value = MealPlanResponse(
+        summary="ok",
+        meals=[
+            {"type": "Breakfast", "name": "X", "description": "d", "calories": 1},
+            {"type": "Lunch", "name": "Y", "description": "d", "calories": 1},
+            {"type": "Dinner", "name": "Z", "description": "d", "calories": 1},
+        ],
+        grocery_list=[{"item": "a", "quantity": "1"}],
+    )
+    response = client.post(
+        "/generate-meal-plan/from-oura",
+        headers={**auth_headers, "X-Forwarded-For": "127.0.0.6"},
+        json={"diet_style": "vegan"},
+    )
+    assert response.status_code == 200
+    mock_gen.assert_called_once()
+    assert mock_gen.call_args[0][0].plan_preferences == ["batch cook sunday"]
+
+
+@patch("app.main.save_plan")
+@patch("app.main.generate_weekly_meal_plan", new_callable=AsyncMock)
+@patch("app.main.fetch_oura_biometrics", new_callable=AsyncMock)
+@patch("app.main.get_valid_access_token", new_callable=AsyncMock)
+def test_generate_weekly_meal_plan_from_oura_merges_plan_preferences(
+    mock_token,
+    mock_fetch,
+    mock_weekly,
+    mock_save,
+    auth_headers,
+    client,
+):
+    mock_token.return_value = "oura-access"
+    mock_fetch.return_value = _sample_biometric_data()
+    mock_weekly.return_value = WeeklyMealPlanResponse(
+        summary="Weekly ok",
+        days=[
+            DayPlan(
+                day="Monday",
+                meals=[
+                    {"type": "Breakfast", "name": "Oats", "description": "d", "calories": 300},
+                    {"type": "Lunch", "name": "Salad", "description": "d", "calories": 400},
+                    {"type": "Dinner", "name": "Tofu", "description": "d", "calories": 500},
+                ],
+            ),
+        ],
+        grocery_list=[GroceryItemWeekly(item="Oats", quantity="2 cups", prep_notes=None)],
+    )
+    response = client.post(
+        "/generate-meal-plan/from-oura",
+        headers={**auth_headers, "X-Forwarded-For": "127.0.0.8"},
+        params={"weekly_prep": True, "weekly_days": 5},
+        json={"plan_preferences": ["minimal prep"]},
+    )
+    assert response.status_code == 200
+    mock_weekly.assert_called_once()
+    merged = mock_weekly.call_args.args[0]
+    assert merged.plan_preferences == ["minimal prep"]
+    assert mock_weekly.call_args.kwargs["days"] == 5
+    mock_save.assert_called_once()
 
 
 def test_preferences_requires_auth(client):
