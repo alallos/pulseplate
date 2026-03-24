@@ -342,6 +342,25 @@ def test_analytics_event_rejects_non_object_props(client):
     assert response.json()["detail"] == "props must be an object"
 
 
+def test_admin_beta_metrics_requires_auth(client):
+    response = client.get("/admin/beta-metrics")
+    assert response.status_code == 401
+
+
+@patch("app.main.get_beta_metrics_summary")
+def test_admin_beta_metrics_returns_summary(mock_summary, auth_headers, client):
+    mock_summary.return_value = {
+        "events_24h": {"plan_generate_started": 3},
+        "events_7d": {"plan_generate_started": 10},
+        "recent_issue_reports": [],
+    }
+    response = client.get("/admin/beta-metrics", headers=auth_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert "events_24h" in data
+    assert data["events_7d"]["plan_generate_started"] == 10
+
+
 @patch("app.main.get_plans")
 def test_list_plans_returns_history(mock_get_plans, auth_headers, client):
     mock_get_plans.return_value = [

@@ -117,6 +117,33 @@ def init_db() -> None:
                 )
             """)
             cur.execute("CREATE INDEX IF NOT EXISTS idx_oura_webhook_events_user_id ON oura_webhook_events(oura_user_id)")
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS beta_analytics_events (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER,
+                    event_name TEXT NOT NULL,
+                    props_json TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_beta_analytics_events_created_at ON beta_analytics_events(created_at)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_beta_analytics_events_name ON beta_analytics_events(event_name)")
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS support_issue_reports (
+                    id SERIAL PRIMARY KEY,
+                    user_id INTEGER,
+                    issue_id TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    page TEXT,
+                    app_version TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_support_issue_reports_created_at ON support_issue_reports(created_at)")
             try:
                 cur.execute("ALTER TABLE users ADD COLUMN measurement_system TEXT DEFAULT 'us'")
             except Exception:
@@ -173,6 +200,33 @@ def init_db() -> None:
                 )
             """)
             cur.execute("CREATE INDEX IF NOT EXISTS idx_oura_webhook_events_user_id ON oura_webhook_events(oura_user_id)")
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS beta_analytics_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    event_name TEXT NOT NULL,
+                    props_json TEXT,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_beta_analytics_events_created_at ON beta_analytics_events(created_at)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_beta_analytics_events_name ON beta_analytics_events(event_name)")
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS support_issue_reports (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    issue_id TEXT NOT NULL,
+                    message TEXT NOT NULL,
+                    page TEXT,
+                    app_version TEXT,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_support_issue_reports_created_at ON support_issue_reports(created_at)")
 
 
 def get_oura_tokens(user_id: int = DEFAULT_USER_ID) -> dict[str, Any] | None:
@@ -600,6 +654,135 @@ def delete_user_data(user_id: int) -> None:
         cur = conn.cursor()
         cur.execute(_q("DELETE FROM plans WHERE user_id = ?"), (user_id,))
         cur.execute(_q("DELETE FROM users WHERE id = ?"), (user_id,))
+
+
+def save_beta_analytics_event(user_id: int | None, event_name: str, props: dict[str, Any] | None = None) -> None:
+    """Persist a lightweight analytics event for beta metrics."""
+    payload = json.dumps(props or {}, separators=(",", ":"), ensure_ascii=False)
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    with _get_conn() as conn:
+        cur = conn.cursor()
+        if _use_pg:
+            cur.execute(
+                _q("INSERT INTO beta_analytics_events (user_id, event_name, props_json) VALUES (?, ?, ?)"),
+                (user_id, event_name, payload),
+            )
+        else:
+            cur.execute(
+                _q("INSERT INTO beta_analytics_events (user_id, event_name, props_json, created_at) VALUES (?, ?, ?, ?)"),
+                (user_id, event_name, payload, now),
+            )
+
+
+def save_support_issue_report(
+    user_id: int | None, issue_id: str, message: str, page: str | None = None, app_version: str | None = None
+) -> None:
+    """Persist issue reports for beta triage dashboarding."""
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    with _get_conn() as conn:
+        cur = conn.cursor()
+        if _use_pg:
+            cur.execute(
+                _q(
+                    "INSERT INTO support_issue_reports (user_id, issue_id, message, page, app_version) VALUES (?, ?, ?, ?, ?)"
+                ),
+                (user_id, issue_id, message, page, app_version),
+            )
+        else:
+            cur.execute(
+                _q(
+                    "INSERT INTO support_issue_reports (user_id, issue_id, message, page, app_version, created_at) VALUES (?, ?, ?, ?, ?, ?)"
+                ),
+                (user_id, issue_id, message, page, app_version, now),
+            )
+
+
+def get_beta_metrics_summary() -> dict[str, Any]:
+    """Return analytics event counts for last 24h/7d and recent issue reports."""
+    with _get_conn() as conn:
+        cur = conn.cursor()
+        if _use_pg:
+            cur.execute(
+                """
+                SELECT event_name, COUNT(*)::int
+                FROM beta_analytics_events
+                WHERE created_at >= NOW() - INTERVAL '24 hours'
+                GROUP BY event_name
+                ORDER BY event_name
+                """
+            )
+            rows24 = cur.fetchall() or []
+            cur.execute(
+                """
+                SELECT event_name, COUNT(*)::int
+                FROM beta_analytics_events
+                WHERE created_at >= NOW() - INTERVAL '7 days'
+                GROUP BY event_name
+                ORDER BY event_name
+                """
+            )
+            rows7 = cur.fetchall() or []
+            cur.execute(
+                """
+                SELECT issue_id, user_id, message, page, app_version, created_at
+                FROM support_issue_reports
+                ORDER BY created_at DESC
+                LIMIT 20
+                """
+            )
+            issues = cur.fetchall() or []
+        else:
+            cur.execute(
+                """
+                SELECT event_name, COUNT(*) as cnt
+                FROM beta_analytics_events
+                WHERE datetime(created_at) >= datetime('now', '-24 hours')
+                GROUP BY event_name
+                ORDER BY event_name
+                """
+            )
+            rows24 = cur.fetchall() or []
+            cur.execute(
+                """
+                SELECT event_name, COUNT(*) as cnt
+                FROM beta_analytics_events
+                WHERE datetime(created_at) >= datetime('now', '-7 days')
+                GROUP BY event_name
+                ORDER BY event_name
+                """
+            )
+            rows7 = cur.fetchall() or []
+            cur.execute(
+                """
+                SELECT issue_id, user_id, message, page, app_version, created_at
+                FROM support_issue_reports
+                ORDER BY created_at DESC
+                LIMIT 20
+                """
+            )
+            issues = cur.fetchall() or []
+
+    def _rows_to_map(rows: list[Any]) -> dict[str, int]:
+        out: dict[str, int] = {}
+        for r in rows:
+            out[str(r[0])] = int(r[1] or 0)
+        return out
+
+    return {
+        "events_24h": _rows_to_map(rows24),
+        "events_7d": _rows_to_map(rows7),
+        "recent_issue_reports": [
+            {
+                "issue_id": str(r[0]),
+                "user_id": int(r[1]) if r[1] is not None else None,
+                "message": str(r[2]),
+                "page": str(r[3]) if r[3] is not None else None,
+                "app_version": str(r[4]) if r[4] is not None else None,
+                "created_at": (r[5].isoformat().replace("+00:00", "Z") if hasattr(r[5], "isoformat") else str(r[5])),
+            }
+            for r in issues
+        ],
+    }
 
 def get_user_preferences(user_id: int = DEFAULT_USER_ID) -> dict[str, Any]:
     """Return saved preferences. Defaults if not set."""

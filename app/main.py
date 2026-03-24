@@ -68,6 +68,9 @@ from app.db import (
     get_user_oura_user_id,
     get_user_meal_feedback,
     set_user_meal_feedback,
+    save_support_issue_report,
+    save_beta_analytics_event,
+    get_beta_metrics_summary,
 )
 
 # Load environment variables early (even if .env is empty for now)
@@ -584,6 +587,13 @@ async def report_issue(
         str(app_version or ""),
         message.strip()[:500],
     )
+    save_support_issue_report(
+        user_id=user_id,
+        issue_id=issue_id,
+        message=message.strip()[:500],
+        page=str(page or "") or None,
+        app_version=str(app_version or "") or None,
+    )
     return {"status": "received", "issue_id": issue_id}
 
 
@@ -602,7 +612,20 @@ async def analytics_event(request: Request, payload: dict = Body(..., descriptio
         getattr(request.state, "request_id", ""),
         str(props or {})[:500],
     )
+    uid = None
+    try:
+        uid = get_current_user_id(request)
+    except Exception:
+        uid = None
+    save_beta_analytics_event(user_id=uid, event_name=event.strip()[:80], props=props if isinstance(props, dict) else {})
     return {"status": "ok"}
+
+
+@app.get("/admin/beta-metrics")
+async def admin_beta_metrics(user_id: CurrentUserId):
+    """Return beta funnel metrics and recent issue reports (auth required)."""
+    _ = user_id
+    return get_beta_metrics_summary()
 
 
 @app.get("/biometrics/oura", response_model=BiometricData)
