@@ -562,6 +562,49 @@ async def update_meal_feedback(
     return {"feedback": get_user_meal_feedback(user_id)}
 
 
+@app.post("/support/report-issue")
+async def report_issue(
+    request: Request,
+    user_id: CurrentUserId,
+    payload: dict = Body(..., description="Issue payload from app UI"),
+):
+    """Accept a user issue report and log it for beta triage."""
+    message = payload.get("message")
+    page = payload.get("page")
+    app_version = payload.get("app_version")
+    if not isinstance(message, str) or not message.strip():
+        raise HTTPException(status_code=400, detail="message is required")
+    issue_id = str(uuid.uuid4())[:8]
+    log.warning(
+        "beta_issue_reported issue_id=%s user_id=%s request_id=%s page=%s app_version=%s message=%s",
+        issue_id,
+        user_id,
+        getattr(request.state, "request_id", ""),
+        str(page or ""),
+        str(app_version or ""),
+        message.strip()[:500],
+    )
+    return {"status": "received", "issue_id": issue_id}
+
+
+@app.post("/analytics/events")
+async def analytics_event(request: Request, payload: dict = Body(..., description="Client analytics event payload")):
+    """Lightweight event ingestion for beta funnel metrics."""
+    event = payload.get("event")
+    props = payload.get("props")
+    if not isinstance(event, str) or not event.strip():
+        raise HTTPException(status_code=400, detail="event is required")
+    if props is not None and not isinstance(props, dict):
+        raise HTTPException(status_code=400, detail="props must be an object")
+    log.info(
+        "beta_analytics event=%s request_id=%s props=%s",
+        event.strip()[:80],
+        getattr(request.state, "request_id", ""),
+        str(props or {})[:500],
+    )
+    return {"status": "ok"}
+
+
 @app.get("/biometrics/oura", response_model=BiometricData)
 async def get_oura_biometrics(user_id: CurrentUserId):
     """

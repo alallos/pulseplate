@@ -267,6 +267,81 @@ def test_update_preferences_saves_and_returns_prefs(
     mock_set_prefs.assert_called_once()
 
 
+def test_meal_feedback_requires_auth(client):
+    response = client.get("/meal-feedback")
+    assert response.status_code == 401
+
+
+@patch("app.main.get_user_meal_feedback")
+def test_get_meal_feedback_returns_saved_map(mock_get_feedback, auth_headers, client):
+    mock_get_feedback.return_value = {"overnight oats": "up", "fried rice": "down"}
+    response = client.get("/meal-feedback", headers=auth_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert "feedback" in data
+    assert data["feedback"]["overnight oats"] == "up"
+    mock_get_feedback.assert_called_once()
+
+
+@patch("app.main.get_user_meal_feedback")
+@patch("app.main.set_user_meal_feedback")
+def test_update_meal_feedback_saves_map(mock_set_feedback, mock_get_feedback, auth_headers, client):
+    mock_get_feedback.return_value = {"oatmeal": "up"}
+    payload = {"feedback": {"oatmeal": "up"}}
+    response = client.put("/meal-feedback", headers=auth_headers, json=payload)
+    assert response.status_code == 200
+    assert response.json()["feedback"]["oatmeal"] == "up"
+    mock_set_feedback.assert_called_once()
+
+
+def test_update_meal_feedback_rejects_non_object(auth_headers, client):
+    response = client.put("/meal-feedback", headers=auth_headers, json={"feedback": "bad"})
+    assert response.status_code == 400
+    assert response.json()["detail"] == "feedback must be an object"
+
+
+def test_report_issue_requires_auth(client):
+    response = client.post("/support/report-issue", json={"message": "something broke"})
+    assert response.status_code == 401
+
+
+def test_report_issue_requires_message(auth_headers, client):
+    response = client.post("/support/report-issue", headers=auth_headers, json={"page": "/"})
+    assert response.status_code == 400
+    assert response.json()["detail"] == "message is required"
+
+
+def test_report_issue_accepts_valid_payload(auth_headers, client):
+    response = client.post(
+        "/support/report-issue",
+        headers=auth_headers,
+        json={"message": "Generate button stuck on loading", "page": "/", "app_version": "web"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "received"
+    assert isinstance(data.get("issue_id"), str)
+    assert len(data["issue_id"]) == 8
+
+
+def test_analytics_event_accepts_valid_payload(client):
+    response = client.post("/analytics/events", json={"event": "plan_generate_started", "props": {"mode": "daily"}})
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+
+
+def test_analytics_event_requires_event_field(client):
+    response = client.post("/analytics/events", json={"props": {}})
+    assert response.status_code == 400
+    assert response.json()["detail"] == "event is required"
+
+
+def test_analytics_event_rejects_non_object_props(client):
+    response = client.post("/analytics/events", json={"event": "x", "props": "bad"})
+    assert response.status_code == 400
+    assert response.json()["detail"] == "props must be an object"
+
+
 @patch("app.main.get_plans")
 def test_list_plans_returns_history(mock_get_plans, auth_headers, client):
     mock_get_plans.return_value = [

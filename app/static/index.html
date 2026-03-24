@@ -443,6 +443,20 @@
       font-weight: 600;
     }
     .footer-links a:hover { text-decoration: underline; }
+    .report-issue-btn {
+      font-size: 0.78rem;
+      border: 1px dashed var(--border);
+      color: var(--muted);
+      background: transparent;
+      padding: 0.28rem 0.55rem;
+      border-radius: 999px;
+      cursor: pointer;
+      margin-left: 0.35rem;
+    }
+    .report-issue-btn:hover {
+      border-color: rgba(88, 166, 255, 0.8);
+      color: var(--text);
+    }
 
     .biometrics-fetched-at {
       font-size: 0.82rem;
@@ -912,10 +926,11 @@
 
     <div class="footer-links" role="contentinfo">
       <div>PulsePlate is an AI meal planner using your Oura data.</div>
-      <div style="display:flex; gap:0.75rem; flex-wrap:wrap;">
+      <div style="display:flex; gap:0.75rem; flex-wrap:wrap; align-items:center;">
         <a href="/about">How it works</a>
         <a href="/privacy">Privacy</a>
         <a href="/terms">Terms</a>
+        <button type="button" id="reportIssueBtn" class="report-issue-btn">Report issue</button>
       </div>
     </div>
 
@@ -975,6 +990,7 @@
     const shareFullPlanBtn = document.getElementById('shareFullPlanBtn');
     const downloadFullPlanBtn = document.getElementById('downloadFullPlanBtn');
     const quickPrefs = document.getElementById('quickPrefs');
+    const reportIssueBtn = document.getElementById('reportIssueBtn');
 
     let planMode = 'daily';
     let lastGroceryList = [];
@@ -1029,6 +1045,16 @@
     function formatGeneratedAt() {
       const now = new Date();
       return now.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+    }
+
+    function trackEvent(event, props) {
+      if (!event) return;
+      fetch('/analytics/events', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event, props: props || {} }),
+      }).catch(() => {});
     }
 
     function normalizeMealName(name) {
@@ -1176,6 +1202,7 @@
         const r = await fetch('/biometrics/oura', { credentials: 'include' });
         if (r.ok) {
           hasConnectedSession = true;
+          trackEvent('connect_status_ok', { source: 'check_connection' });
           statusEl.textContent = 'Oura connected.';
           statusEl.classList.remove('loading');
           statusEl.classList.add('connected');
@@ -1193,6 +1220,7 @@
           loadMealFeedbackFromServer();
         } else {
           hasConnectedSession = false;
+          trackEvent('connect_status_not_connected', { status_code: r.status });
           statusEl.textContent = (r.status === 401)
             ? 'Session expired or not connected. Connect Oura to continue.'
             : 'Connect your Oura account to get personalized meal plans.';
@@ -1209,6 +1237,7 @@
         }
       } catch (_) {
         hasConnectedSession = false;
+        trackEvent('connect_status_error', { source: 'check_connection' });
         statusEl.textContent = 'Connect your Oura account to get personalized meal plans.';
         statusEl.classList.remove('loading');
         connectBtn.style.display = 'inline-block';
@@ -1252,6 +1281,7 @@
         const r = await fetch('/biometrics/oura', { credentials: 'include' });
         const data = await r.json();
         if (r.ok) {
+          trackEvent('biometrics_load_success');
           const sleepScore = Math.round(Number(data.sleep_score) || 0);
           const sleepPct = Math.min(100, Math.max(0, sleepScore));
           const sleepBand = sleepPct >= 75 ? 'optimal' : sleepPct >= 60 ? 'good' : sleepPct >= 50 ? 'fair' : 'low';
@@ -1287,6 +1317,7 @@
           biometricsActions.style.display = 'block';
           updateBiometricsFetchedAt();
         } else {
+          trackEvent('biometrics_load_failure', { status_code: r.status });
           biometricsContent.innerHTML = 'Could not load biometrics. ' + (data.detail || r.statusText) + ' <button type="button" class="secondary" id="retryBiometricsBtn">Try again</button>';
           biometricsContent.classList.add('error');
           hideBiometricsFetchedAt();
@@ -1294,6 +1325,7 @@
           if (retry) retry.addEventListener('click', () => loadBiometrics());
         }
       } catch (e) {
+        trackEvent('biometrics_load_error');
         biometricsContent.innerHTML = 'Failed to load biometrics. <button type="button" class="secondary" id="retryBiometricsBtn">Try again</button>';
         biometricsContent.classList.add('error');
         hideBiometricsFetchedAt();
@@ -1820,6 +1852,7 @@
       getPlanBtn.disabled = true;
       const isWeekly = planMode === 'weekly';
       const days = parseInt(weeklyDays.value, 10) || 7;
+      trackEvent('plan_generate_started', { mode: isWeekly ? 'weekly' : 'daily', days: isWeekly ? days : 1 });
       getPlanBtn.innerHTML = '<span class="spinner"></span> ' + (isWeekly ? 'Generating weekly plan…' : 'Generating…');
       const url = '/generate-meal-plan/from-oura' + (isWeekly ? '?weekly_prep=true&weekly_days=' + days : '');
       try {
@@ -1855,6 +1888,7 @@
           data = {};
         }
         if (r.ok) {
+          trackEvent('plan_generate_success', { mode: data.days ? 'weekly' : 'daily', days: data.days ? (data.days.length || days) : 1 });
           if (data.days) {
             renderWeeklyPlan(data);
             showMessage(days + '-day plan ready.', 'success');
@@ -1864,6 +1898,7 @@
           }
           loadHistory();
         } else {
+          trackEvent('plan_generate_failure', { status_code: r.status });
           let msg = 'Failed to generate plan.';
           if (r.status === 429) msg = 'Too many requests. Please wait a bit and try again.';
           if (r.status === 503) msg = 'AI is temporarily unavailable. Try again in a moment.';
@@ -1874,6 +1909,7 @@
           showMessage(msg, 'error');
         }
       } catch (e) {
+        trackEvent('plan_generate_error');
         // Fetch/network error (server unreachable / TLS / DNS, etc.)
         showMessage('Request failed. Check your connection and try again.', 'error');
       } finally {
@@ -1915,6 +1951,34 @@
       if (!confirm('Delete ALL your saved plans and preferences? This cannot be undone.')) return;
       postRedirect('/account/delete');
     });
+    if (reportIssueBtn) {
+      reportIssueBtn.addEventListener('click', async () => {
+        const message = prompt('Describe what went wrong (short note):');
+        if (!message || !message.trim()) return;
+        try {
+          const r = await fetch('/support/report-issue', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: message.trim(),
+              page: window.location.pathname,
+              app_version: 'web',
+            }),
+          });
+          if (!r.ok) {
+            showMessage('Could not send report. Please try again.', 'error');
+            return;
+          }
+          const data = await r.json().catch(() => ({}));
+          const id = data.issue_id ? ' (ref ' + data.issue_id + ')' : '';
+          trackEvent('issue_report_submitted', { has_issue_id: !!data.issue_id });
+          showMessage('Thanks, issue reported' + id + '.', 'success');
+        } catch (_) {
+          showMessage('Could not send report. Please try again.', 'error');
+        }
+      });
+    }
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
