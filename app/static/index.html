@@ -1084,6 +1084,7 @@
     let planMode = 'daily';
     let hasTodayDailyPlan = false;
     let todayDailyPlanId = null;
+    let suppressTodayReuseToast = false;
     let lastGroceryList = [];
     let lastPlan = null;
     let toastTimer = null;
@@ -1531,6 +1532,12 @@
         if (planMode === 'daily') {
           getPlanBtn.textContent = hasTodayDailyPlan ? "View today's plan" : "Get today's plan";
         }
+
+        if (planMode === 'daily' && hasTodayDailyPlan && !suppressTodayReuseToast) {
+          showMessage("You're set for today. View your plan below.", 'success');
+          trackEvent('today_plan_already_exists_toast', { plan_id: todayDailyPlanId || undefined });
+        }
+        suppressTodayReuseToast = false;
 
         historyEmpty.style.display = 'none';
         items.forEach(item => {
@@ -2057,6 +2064,8 @@
           } else {
             renderPlan(data);
             showMessage('Plan ready.', 'success');
+            // Avoid showing the "You're set for today" toast right after a fresh generation.
+            suppressTodayReuseToast = true;
           }
           loadHistory();
         } else {
