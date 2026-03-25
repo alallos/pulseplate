@@ -1082,6 +1082,8 @@
     const reportIssueBtn = document.getElementById('reportIssueBtn');
 
     let planMode = 'daily';
+    let hasTodayDailyPlan = false;
+    let todayDailyPlanId = null;
     let lastGroceryList = [];
     let lastPlan = null;
     let toastTimer = null;
@@ -1116,7 +1118,11 @@
       modeWeekly.classList.toggle('active', isWeekly);
       modeDaily.setAttribute('aria-selected', !isWeekly);
       modeWeekly.setAttribute('aria-selected', isWeekly);
-      getPlanBtn.textContent = isWeekly ? 'Get weekly plan' : "Get today's plan";
+      if (isWeekly) {
+        getPlanBtn.textContent = 'Get weekly plan';
+      } else {
+        getPlanBtn.textContent = hasTodayDailyPlan ? "View today's plan" : "Get today's plan";
+      }
     }
     modeDaily.addEventListener('click', () => setPlanMode('daily'));
     modeWeekly.addEventListener('click', () => setPlanMode('weekly'));
@@ -1137,6 +1143,11 @@
     function formatGeneratedAt() {
       const now = new Date();
       return now.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+    }
+
+    function toLocalYmd(d) {
+      // Used to decide whether a saved plan belongs to "today" in the user's local timezone.
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     }
 
     function trackEvent(event, props) {
@@ -1483,6 +1494,8 @@
       try {
         const r = await fetch('/plans?limit=10', { credentials: 'include' });
         if (!r.ok) {
+          hasTodayDailyPlan = false;
+          todayDailyPlanId = null;
           historyEmpty.innerHTML = '<p class="history-empty-desc">No history yet.</p>';
           historyEmpty.style.display = 'block';
           historyList.innerHTML = '';
@@ -1491,9 +1504,34 @@
         const items = await r.json();
         historyList.innerHTML = '';
         if (!items.length) {
+          hasTodayDailyPlan = false;
+          todayDailyPlanId = null;
           historyEmpty.style.display = 'block';
           return;
         }
+        // Completion loop: if today's daily plan is already available, users should view it instead of regenerating.
+        hasTodayDailyPlan = false;
+        todayDailyPlanId = null;
+        try {
+          const todayYmd = toLocalYmd(new Date());
+          const todayItem = items.find(item => {
+            if (!item || item.is_weekly) return false;
+            if (!item.generated_at) return false;
+            try {
+              return toLocalYmd(new Date(item.generated_at)) === todayYmd;
+            } catch (_) {
+              return false;
+            }
+          });
+          if (todayItem && todayItem.id) {
+            hasTodayDailyPlan = true;
+            todayDailyPlanId = todayItem.id;
+          }
+        } catch (_) {}
+        if (planMode === 'daily') {
+          getPlanBtn.textContent = hasTodayDailyPlan ? "View today's plan" : "Get today's plan";
+        }
+
         historyEmpty.style.display = 'none';
         items.forEach(item => {
           const li = document.createElement('li');
@@ -1957,8 +1995,24 @@
 
     getPlanBtn.addEventListener('click', async () => {
       hideMessage();
-      getPlanBtn.disabled = true;
       const isWeekly = planMode === 'weekly';
+      if (!isWeekly && hasTodayDailyPlan && todayDailyPlanId) {
+        getPlanBtn.disabled = true;
+        getPlanBtn.innerHTML = '<span class="spinner"></span> Opening today\'s plan…';
+        try {
+          await reopenPlan(todayDailyPlanId, false);
+          trackEvent('plan_open_existing_today');
+        } catch (_) {
+          trackEvent('plan_open_existing_today_error');
+          showMessage("Could not open today's plan. Try again.", 'error');
+        } finally {
+          getPlanBtn.disabled = false;
+          getPlanBtn.textContent = "View today's plan";
+        }
+        return;
+      }
+
+      getPlanBtn.disabled = true;
       const days = parseInt(weeklyDays.value, 10) || 7;
       trackEvent('plan_generate_started', { mode: isWeekly ? 'weekly' : 'daily', days: isWeekly ? days : 1 });
       getPlanBtn.innerHTML = '<span class="spinner"></span> ' + (isWeekly ? 'Generating weekly plan…' : 'Generating…');
@@ -2022,7 +2076,7 @@
         showMessage('Request failed. Check your connection and try again.', 'error');
       } finally {
         getPlanBtn.disabled = false;
-        getPlanBtn.textContent = isWeekly ? 'Get weekly plan' : "Get today's plan";
+        getPlanBtn.textContent = isWeekly ? 'Get weekly plan' : (hasTodayDailyPlan ? "View today's plan" : "Get today's plan");
       }
     });
 
