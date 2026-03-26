@@ -641,6 +641,22 @@
       color: var(--muted);
       line-height: 1.35;
     }
+    .plan-commit {
+      margin-top: 0.7rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid rgba(45,58,77,0.6);
+      display: flex;
+      align-items: flex-start;
+      gap: 0.55rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.35;
+    }
+    .plan-commit input {
+      margin-top: 0.15rem;
+      transform: scale(1.05);
+    }
+    .plan-commit strong { color: var(--text); }
     .beta-feedback-card {
       margin-top: 0.85rem;
       padding: 0.75rem 0.85rem;
@@ -1028,6 +1044,10 @@
           <button type="button" class="secondary" id="nextTweakBtn">Regenerate with tweaks</button>
         </div>
         <div class="next-steps-sub">Come back tomorrow for an updated plan based on your overnight recovery.</div>
+        <label id="planCommitWrap" class="plan-commit" style="display:none;">
+          <input type="checkbox" id="planCommitCheckbox" />
+          <span><strong>I’m doing this today.</strong> If you change one thing, tweak and regenerate — otherwise, follow the plan and come back tomorrow.</span>
+        </label>
       </div>
       <div id="planFeedbackHint" style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--muted);">
         Rate meals with 👍/👎 so the next plan better matches your taste.
@@ -1117,6 +1137,8 @@
     const nextShareGroceryBtn = document.getElementById('nextShareGroceryBtn');
     const nextCopyGroceryBtn = document.getElementById('nextCopyGroceryBtn');
     const nextTweakBtn = document.getElementById('nextTweakBtn');
+    const planCommitWrap = document.getElementById('planCommitWrap');
+    const planCommitCheckbox = document.getElementById('planCommitCheckbox');
     const quickPrefs = document.getElementById('quickPrefs');
     const reportIssueBtn = document.getElementById('reportIssueBtn');
 
@@ -1191,6 +1213,35 @@
     function toLocalYmd(d) {
       // Used to decide whether a saved plan belongs to "today" in the user's local timezone.
       return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+
+    function getTodayCommitKey() {
+      return 'pulseplate_commit_' + toLocalYmd(new Date());
+    }
+
+    function readTodayCommitted() {
+      try {
+        return localStorage.getItem(getTodayCommitKey()) === '1';
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function writeTodayCommitted(v) {
+      try {
+        localStorage.setItem(getTodayCommitKey(), v ? '1' : '0');
+      } catch (_) {}
+    }
+
+    function updatePlanCommitUI() {
+      if (!planCommitWrap || !planCommitCheckbox) return;
+      const isWeekly = Array.isArray(lastPlan?.days);
+      if (isWeekly || !hasConnectedSession) {
+        planCommitWrap.style.display = 'none';
+        return;
+      }
+      planCommitWrap.style.display = 'flex';
+      planCommitCheckbox.checked = readTodayCommitted();
     }
 
     function trackEvent(event, props) {
@@ -1735,6 +1786,7 @@
       });
       copyGroceryWrap.style.display = lastGroceryList.length ? 'block' : 'none';
       if (nextSteps) nextSteps.style.display = lastGroceryList.length ? 'block' : 'none';
+      updatePlanCommitUI();
       planResult.classList.add('visible');
       planResult.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
@@ -1784,6 +1836,7 @@
       planGrocery.appendChild(list);
       copyGroceryWrap.style.display = lastGroceryList.length ? 'block' : 'none';
       if (nextSteps) nextSteps.style.display = lastGroceryList.length ? 'block' : 'none';
+      updatePlanCommitUI();
       planResult.classList.add('visible');
       planResult.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
@@ -1955,6 +2008,15 @@
     }
     if (nextTweakBtn) {
       nextTweakBtn.addEventListener('click', nudgeTweaks);
+    }
+
+    if (planCommitCheckbox) {
+      planCommitCheckbox.addEventListener('change', () => {
+        const v = !!planCommitCheckbox.checked;
+        writeTodayCommitted(v);
+        trackEvent(v ? 'plan_commit_checked' : 'plan_commit_unchecked', { mode: planMode });
+        if (v) showMessage('Locked in for today. See you tomorrow for the updated plan.', 'success');
+      });
     }
 
     copyGroceryBtn.addEventListener('click', async () => {
