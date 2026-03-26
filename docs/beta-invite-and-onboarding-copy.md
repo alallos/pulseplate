@@ -62,3 +62,44 @@ Looking good so far?
 - Tell us what feels confusing
 - Use "Report issue" anytime (30 seconds)
 
+## 5) Audience Variants
+
+### A) Premium / Concierge Tone
+
+Subject: Private PulsePlate beta invitation
+
+Hi [Name] - we are opening a limited PulsePlate beta and would value your feedback.
+
+PulsePlate turns your Oura recovery and sleep data into a personalized daily or weekly meal plan, plus a practical grocery list, in seconds.
+
+As a beta member, your role is simple:
+- Use it for 5-7 days in your normal routine
+- Share what feels high-value and what still needs polish
+- Report friction directly from the app so we can prioritize quickly
+
+Access: [APP_URL]
+
+Support expectations:
+- iPhone Safari and Android Chrome supported
+- In-app data controls: disconnect Oura or delete data anytime
+- Beta quality may vary while we iterate
+
+Thank you for helping shape the product at this stage.
+
+### B) Casual Friend Tone
+
+Subject: Want to test my app?
+
+Hey [Name] - I built something called PulsePlate and would love your honest feedback.
+
+It connects to Oura and gives you a daily meal plan + grocery list based on your recovery/sleep.
+
+If you are down to test:
+- Try it for a few days
+- Tell me what is awesome / confusing
+- Use the in-app "Report issue" button if anything breaks
+
+Link: [APP_URL]
+
+No pressure - even one real run-through helps a lot.
+
