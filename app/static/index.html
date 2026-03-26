@@ -615,6 +615,32 @@
       flex-wrap: wrap;
       gap: 0.5rem;
     }
+    .next-steps {
+      margin-top: 0.85rem;
+      padding: 0.7rem 0.85rem;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+    }
+    .next-steps-title {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      font-weight: 700;
+      margin-bottom: 0.5rem;
+    }
+    .next-steps-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .next-steps-sub {
+      margin-top: 0.55rem;
+      font-size: 0.84rem;
+      color: var(--muted);
+      line-height: 1.35;
+    }
     .beta-feedback-card {
       margin-top: 0.85rem;
       padding: 0.75rem 0.85rem;
@@ -994,6 +1020,15 @@
         <button type="button" class="secondary" id="shareFullPlanBtn">Share full plan</button>
         <button type="button" class="secondary" id="downloadFullPlanBtn">Download full plan .txt</button>
       </div>
+      <div id="nextSteps" class="next-steps" style="display:none;">
+        <div class="next-steps-title">Next</div>
+        <div class="next-steps-actions">
+          <button type="button" class="secondary" id="nextShareGroceryBtn">Share grocery</button>
+          <button type="button" class="secondary" id="nextCopyGroceryBtn">Copy grocery</button>
+          <button type="button" class="secondary" id="nextTweakBtn">Regenerate with tweaks</button>
+        </div>
+        <div class="next-steps-sub">Come back tomorrow for an updated plan based on your overnight recovery.</div>
+      </div>
       <div id="planFeedbackHint" style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--muted);">
         Rate meals with 👍/👎 so the next plan better matches your taste.
       </div>
@@ -1078,6 +1113,10 @@
     const copyFullPlanBtn = document.getElementById('copyFullPlanBtn');
     const shareFullPlanBtn = document.getElementById('shareFullPlanBtn');
     const downloadFullPlanBtn = document.getElementById('downloadFullPlanBtn');
+    const nextSteps = document.getElementById('nextSteps');
+    const nextShareGroceryBtn = document.getElementById('nextShareGroceryBtn');
+    const nextCopyGroceryBtn = document.getElementById('nextCopyGroceryBtn');
+    const nextTweakBtn = document.getElementById('nextTweakBtn');
     const quickPrefs = document.getElementById('quickPrefs');
     const reportIssueBtn = document.getElementById('reportIssueBtn');
 
@@ -1695,6 +1734,7 @@
         ul.appendChild(li);
       });
       copyGroceryWrap.style.display = lastGroceryList.length ? 'block' : 'none';
+      if (nextSteps) nextSteps.style.display = lastGroceryList.length ? 'block' : 'none';
       planResult.classList.add('visible');
       planResult.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
@@ -1743,6 +1783,7 @@
       });
       planGrocery.appendChild(list);
       copyGroceryWrap.style.display = lastGroceryList.length ? 'block' : 'none';
+      if (nextSteps) nextSteps.style.display = lastGroceryList.length ? 'block' : 'none';
       planResult.classList.add('visible');
       planResult.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
@@ -1861,6 +1902,59 @@
       if (!navigator.share) return false;
       await navigator.share({ title, text, url: window.location.href });
       return true;
+    }
+
+    function nudgeTweaks() {
+      trackEvent('next_steps_tweak_clicked', { mode: planMode });
+      try {
+        if (onboardingBody && !onboardingBody.classList.contains('collapsed')) {
+          onboardingBody.classList.add('collapsed');
+          onboardingToggle.textContent = 'Show';
+          onboardingToggle.setAttribute('aria-expanded', 'false');
+        }
+      } catch (_) {}
+      try {
+        if (prefsBody && prefsBody.classList.contains('collapsed')) {
+          prefsBody.classList.remove('collapsed');
+          prefsToggle.textContent = 'Hide';
+          prefsToggle.setAttribute('aria-expanded', 'true');
+        }
+      } catch (_) {}
+      try {
+        const el = quickPrefs || document.getElementById('quickPrefsWrap') || prefsCard;
+        if (el && el.scrollIntoView) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      } catch (_) {}
+      try {
+        if (quickPrefs) {
+          quickPrefs.animate(
+            [
+              { boxShadow: '0 0 0 0 rgba(88,166,255,0.0)' },
+              { boxShadow: '0 0 0 4px rgba(88,166,255,0.25)' },
+              { boxShadow: '0 0 0 0 rgba(88,166,255,0.0)' },
+            ],
+            { duration: 900, easing: 'ease-out' }
+          );
+        }
+      } catch (_) {}
+      showMessage('Pick a quick preference (or update preferences), then regenerate.', 'success');
+    }
+
+    if (nextShareGroceryBtn) {
+      nextShareGroceryBtn.addEventListener('click', () => {
+        trackEvent('next_steps_share_grocery_clicked', { mode: planMode });
+        shareGroceryBtn?.click();
+      });
+    }
+    if (nextCopyGroceryBtn) {
+      nextCopyGroceryBtn.addEventListener('click', () => {
+        trackEvent('next_steps_copy_grocery_clicked', { mode: planMode });
+        copyGroceryBtn?.click();
+      });
+    }
+    if (nextTweakBtn) {
+      nextTweakBtn.addEventListener('click', nudgeTweaks);
     }
 
     copyGroceryBtn.addEventListener('click', async () => {
