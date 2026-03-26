@@ -479,6 +479,18 @@ def test_admin_beta_metrics_requires_auth(client):
     assert response.status_code == 401
 
 
+def test_admin_beta_page_requires_auth(client):
+    response = client.get("/admin/beta")
+    assert response.status_code == 401
+
+
+def test_admin_beta_page_returns_html_when_authed(auth_headers, client):
+    response = client.get("/admin/beta", headers=auth_headers)
+    assert response.status_code == 200
+    assert "text/html" in (response.headers.get("content-type") or "")
+    assert "Beta Ops" in response.text
+
+
 @patch("app.main.get_beta_metrics_summary")
 def test_admin_beta_metrics_returns_summary(mock_summary, auth_headers, client):
     mock_summary.return_value = {

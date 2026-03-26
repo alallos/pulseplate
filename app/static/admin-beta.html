@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PulsePlate - Beta Ops</title>
+  <meta name="theme-color" content="#0f1419">
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: rgba(26, 35, 50, 0.78);
+      --border: #2d3a4d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --success: #3fb950;
+      --warn: #d4a72c;
+      --error: #f85149;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Segoe UI", system-ui, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1200px circle at 10% -10%, rgba(88, 166, 255, 0.18), transparent 45%),
+        radial-gradient(900px circle at 90% 0%, rgba(63, 185, 80, 0.10), transparent 40%),
+        radial-gradient(700px circle at 50% 110%, rgba(248, 81, 73, 0.06), transparent 45%),
+        var(--bg);
+      line-height: 1.45;
+      padding: 1.4rem 1rem 2rem;
+    }
+    .wrap { max-width: 900px; margin: 0 auto; }
+    .top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.8rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    .btn {
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 0.45rem 0.8rem;
+      font-size: 0.86rem;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .btn:hover { border-color: rgba(88,166,255,0.8); }
+    h1 { margin: 0; font-size: 1.45rem; letter-spacing: -0.02em; }
+    .muted { color: var(--muted); font-size: 0.9rem; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.7rem;
+      margin: 0.8rem 0 1rem 0;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.85rem 0.95rem;
+      backdrop-filter: blur(9px);
+      -webkit-backdrop-filter: blur(9px);
+    }
+    .kpi-title { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+    .kpi-value { font-size: 1.25rem; font-weight: 700; margin-top: 0.2rem; }
+    .kpi-sub { font-size: 0.8rem; color: var(--muted); margin-top: 0.3rem; }
+    .section-title { margin: 0; font-size: 1rem; }
+    .row {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 0.7rem;
+    }
+    .list { margin: 0.5rem 0 0 0; padding-left: 1.1rem; color: var(--muted); font-size: 0.9rem; }
+    .list li { margin-bottom: 0.4rem; }
+    .issues { list-style: none; margin: 0.55rem 0 0 0; padding: 0; }
+    .issues li {
+      border-bottom: 1px solid rgba(45,58,77,0.65);
+      padding: 0.5rem 0;
+      font-size: 0.86rem;
+    }
+    .issues li:last-child { border-bottom: none; }
+    .issue-meta { color: var(--muted); font-size: 0.77rem; margin-top: 0.2rem; }
+    .badge {
+      display: inline-block;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.08rem 0.45rem;
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-right: 0.25rem;
+    }
+    .ok { color: var(--success); }
+    .warn { color: var(--warn); }
+    .error { color: var(--error); }
+    .helper { font-size: 0.8rem; color: var(--muted); margin-top: 0.6rem; }
+    @media (max-width: 800px) {
+      .grid { grid-template-columns: 1fr; }
+      .row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <h1>Beta Ops</h1>
+        <div class="muted">Daily triage view for funnel health, issues, and actions.</div>
+      </div>
+      <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
+        <a class="btn" href="/">Back to app</a>
+        <button class="btn" id="refreshBtn" type="button">Refresh</button>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="kpi-title">Plan Starts (24h)</div>
+        <div class="kpi-value" id="kpiStarts24h">-</div>
+        <div class="kpi-sub" id="kpiStarts7d">7d: -</div>
+      </div>
+      <div class="card">
+        <div class="kpi-title">Plan Success (24h)</div>
+        <div class="kpi-value" id="kpiSuccess24h">-</div>
+        <div class="kpi-sub" id="kpiSuccessRate24h">Success rate: -</div>
+      </div>
+      <div class="card">
+        <div class="kpi-title">Issues Submitted (24h)</div>
+        <div class="kpi-value" id="kpiIssues24h">-</div>
+        <div class="kpi-sub" id="kpiIssueHint">Recent reports: -</div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="card">
+        <h2 class="section-title">Recent issue reports</h2>
+        <ul class="issues" id="issuesList">
+          <li class="muted">Loading...</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h2 class="section-title">Daily triage checklist</h2>
+        <ul class="list">
+          <li>Review new Sentry issues and beta reports.</li>
+          <li>Tag top items as <span class="badge">P0</span><span class="badge">P1</span><span class="badge">P2</span>.</li>
+          <li>Confirm top blocker has an owner + next action.</li>
+          <li>Respond to beta reports within 24 hours.</li>
+        </ul>
+        <div style="margin-top:0.7rem; display:flex; gap:0.45rem; flex-wrap:wrap;">
+          <a class="btn" href="https://sentry.io/issues/" target="_blank" rel="noopener noreferrer">Open Sentry Issues</a>
+          <a class="btn" href="/" target="_self">Open PulsePlate</a>
+        </div>
+        <div id="statusLine" class="helper">Last refresh: -</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const kpiStarts24h = document.getElementById('kpiStarts24h');
+    const kpiStarts7d = document.getElementById('kpiStarts7d');
+    const kpiSuccess24h = document.getElementById('kpiSuccess24h');
+    const kpiSuccessRate24h = document.getElementById('kpiSuccessRate24h');
+    const kpiIssues24h = document.getElementById('kpiIssues24h');
+    const kpiIssueHint = document.getElementById('kpiIssueHint');
+    const issuesList = document.getElementById('issuesList');
+    const statusLine = document.getElementById('statusLine');
+    const refreshBtn = document.getElementById('refreshBtn');
+
+    function n(v) { return Number(v || 0); }
+
+    async function loadMetrics() {
+      statusLine.textContent = 'Refreshing...';
+      try {
+        const r = await fetch('/admin/beta-metrics', { credentials: 'include' });
+        if (!r.ok) {
+          statusLine.textContent = r.status === 401
+            ? 'Not authorized. Connect/login first.'
+            : 'Could not load beta metrics.';
+          return;
+        }
+        const data = await r.json();
+        const e24 = data.events_24h || {};
+        const e7 = data.events_7d || {};
+        const issues = Array.isArray(data.recent_issue_reports) ? data.recent_issue_reports : [];
+
+        const starts24 = n(e24.plan_generate_started);
+        const success24 = n(e24.plan_generate_success);
+        const fail24 = n(e24.plan_generate_failure) + n(e24.plan_generate_error);
+        const starts7 = n(e7.plan_generate_started);
+        const successRate24 = starts24 > 0 ? Math.round((success24 / starts24) * 100) : 0;
+        const issues24 = issues.filter(i => {
+          if (!i || !i.created_at) return false;
+          const t = new Date(i.created_at).getTime();
+          if (!Number.isFinite(t)) return false;
+          return (Date.now() - t) <= 24 * 60 * 60 * 1000;
+        }).length;
+
+        kpiStarts24h.textContent = String(starts24);
+        kpiStarts7d.textContent = '7d: ' + String(starts7);
+        kpiSuccess24h.textContent = String(success24);
+        kpiSuccessRate24h.textContent = 'Success rate: ' + String(successRate24) + '%'
+          + (fail24 ? ' (' + String(fail24) + ' failures)' : '');
+        kpiIssues24h.textContent = String(issues24);
+        kpiIssueHint.textContent = 'Recent reports: ' + String(issues.length);
+
+        if (!issues.length) {
+          issuesList.innerHTML = '<li class="muted">No issue reports yet.</li>';
+        } else {
+          issuesList.innerHTML = '';
+          issues.slice(0, 12).forEach(item => {
+            const li = document.createElement('li');
+            const msg = String(item.message || '').trim();
+            const page = item.page ? ' page=' + item.page : '';
+            const user = item.user_id != null ? ' user=' + item.user_id : '';
+            const when = item.created_at ? new Date(item.created_at).toLocaleString() : '';
+            li.innerHTML =
+              '<div>' + (msg || '(empty message)') + '</div>' +
+              '<div class="issue-meta">' +
+              '<span class="badge">ref ' + (item.issue_id || '-') + '</span>' +
+              (when ? '<span>' + when + '</span>' : '') +
+              (page ? ' · ' + page : '') +
+              (user ? ' · ' + user : '') +
+              '</div>';
+            issuesList.appendChild(li);
+          });
+        }
+
+        statusLine.textContent = 'Last refresh: ' + new Date().toLocaleString();
+      } catch (_) {
+        statusLine.textContent = 'Refresh failed. Check connection and try again.';
+      }
+    }
+
+    refreshBtn.addEventListener('click', loadMetrics);
+    loadMetrics();
+  </script>
+</body>
+</html>
+

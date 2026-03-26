@@ -192,6 +192,16 @@ async def terms():
     raise HTTPException(status_code=404, detail="Not found")
 
 
+@app.get("/admin/beta")
+async def admin_beta_page(user_id: CurrentUserId):
+    """Serve lightweight beta operations dashboard (auth required)."""
+    _ = user_id
+    page = _STATIC_DIR / "admin-beta.html"
+    if page.exists():
+        return FileResponse(page)
+    raise HTTPException(status_code=404, detail="Not found")
+
+
 @app.get("/manifest.webmanifest")
 async def manifest_webmanifest():
     """PWA manifest (referenced from index.html)."""
