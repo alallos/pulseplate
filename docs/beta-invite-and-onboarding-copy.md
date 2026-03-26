@@ -103,3 +103,28 @@ Link: [APP_URL]
 
 No pressure - even one real run-through helps a lot.
 
+### C) Coach / Influencer Community Tone
+
+Subject: Invite your community to PulsePlate beta
+
+Hi [Coach/Creator Name] - I would love to invite you (and optionally a small test group from your community) into the PulsePlate beta.
+
+PulsePlate uses Oura recovery and sleep data to generate:
+- personalized daily or weekly meal plans
+- easy grocery lists
+- quick plan adjustments from real-world feedback
+
+Why this may fit your audience:
+- simple daily flow (morning check-in -> plan -> grocery/share)
+- no macro spreadsheets required
+- clear feedback loop to improve recommendations over time
+
+What I need from beta participants:
+- use PulsePlate for 5-7 days
+- share what improves adherence vs what creates friction
+- report issues directly in-app
+
+Access link: [APP_URL]
+
+If helpful, I can provide a short custom onboarding blurb for your audience voice/style.
+
