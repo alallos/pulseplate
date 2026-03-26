@@ -588,6 +588,45 @@
       box-shadow: 0 0 0 1px rgba(88, 166, 255, 0.35), 0 4px 14px rgba(88, 166, 255, 0.25);
       transform: translateY(-1px);
     }
+    .checkin-card {
+      margin-top: 0.7rem;
+      padding: 0.7rem 0.8rem;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+    }
+    .checkin-title {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 0.45rem;
+      font-weight: 600;
+    }
+    .checkin-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+    }
+    .checkin-btn {
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.03);
+      color: var(--muted);
+      padding: 0.35rem 0.65rem;
+      border-radius: 999px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: 0.15s ease;
+    }
+    .checkin-btn.active {
+      color: var(--text);
+      border-color: rgba(88, 166, 255, 1);
+      background: rgba(88, 166, 255, 0.2);
+      box-shadow: 0 0 0 1px rgba(88, 166, 255, 0.32);
+    }
+    .checkin-note {
+      margin-top: 0.45rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+    }
     .meal-feedback {
       margin-top: 0.5rem;
       display: flex;
@@ -912,6 +951,15 @@
           <button type="button" class="quick-chip" data-pref="budget-friendly meals">Cheaper meals</button>
           <button type="button" class="quick-chip" data-pref="faster prep meals">Less prep time</button>
         </div>
+        <div id="morningCheckinCard" class="checkin-card" aria-label="Morning check-in">
+          <div class="checkin-title">How's today feeling?</div>
+          <div id="morningCheckinActions" class="checkin-actions">
+            <button type="button" class="checkin-btn" data-feeling="great">Great</button>
+            <button type="button" class="checkin-btn" data-feeling="okay">Okay</button>
+            <button type="button" class="checkin-btn" data-feeling="low">Low energy</button>
+          </div>
+          <div id="morningCheckinNote" class="checkin-note">Optional, but helps tailor today's plan.</div>
+        </div>
       </div>
       <div id="actions" style="display: none;">
         <div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom: 0.75rem;">
@@ -1139,6 +1187,9 @@
     const nextTweakBtn = document.getElementById('nextTweakBtn');
     const planCommitWrap = document.getElementById('planCommitWrap');
     const planCommitCheckbox = document.getElementById('planCommitCheckbox');
+    const morningCheckinCard = document.getElementById('morningCheckinCard');
+    const morningCheckinActions = document.getElementById('morningCheckinActions');
+    const morningCheckinNote = document.getElementById('morningCheckinNote');
     const quickPrefs = document.getElementById('quickPrefs');
     const reportIssueBtn = document.getElementById('reportIssueBtn');
 
@@ -1157,6 +1208,7 @@
     let betaFeedbackSentiment = '';
     const FEEDBACK_KEY = 'pulseplate_meal_feedback_v1';
     const QUICK_PREFS_KEY = 'pulseplate_quick_prefs_v1';
+    const MORNING_CHECKIN_KEY_PREFIX = 'pulseplate_morning_checkin_';
     const BETA_FEEDBACK_SENT_KEY = 'pulseplate_beta_feedback_sent_v1';
 
     function hideBiometricsFetchedAt() {
@@ -1219,6 +1271,10 @@
       return 'pulseplate_commit_' + toLocalYmd(new Date());
     }
 
+    function getTodayCheckinKey() {
+      return MORNING_CHECKIN_KEY_PREFIX + toLocalYmd(new Date());
+    }
+
     function readTodayCommitted() {
       try {
         return localStorage.getItem(getTodayCommitKey()) === '1';
@@ -1242,6 +1298,43 @@
       }
       planCommitWrap.style.display = 'flex';
       planCommitCheckbox.checked = readTodayCommitted();
+    }
+
+    function readMorningCheckin() {
+      try {
+        const v = localStorage.getItem(getTodayCheckinKey());
+        if (v === 'great' || v === 'okay' || v === 'low') return v;
+      } catch (_) {}
+      return '';
+    }
+
+    function writeMorningCheckin(v) {
+      try {
+        if (!v) localStorage.removeItem(getTodayCheckinKey());
+        else localStorage.setItem(getTodayCheckinKey(), v);
+      } catch (_) {}
+    }
+
+    function morningCheckinInstruction(v) {
+      if (v === 'great') return 'feeling great today: keep meals balanced and performance-supportive';
+      if (v === 'okay') return 'feeling okay today: prioritize steady energy and simple prep';
+      if (v === 'low') return 'low energy today: easiest prep possible and comfort-forward stable energy meals';
+      return '';
+    }
+
+    function updateMorningCheckinUI() {
+      if (!morningCheckinCard || !morningCheckinActions) return;
+      const current = readMorningCheckin();
+      morningCheckinActions.querySelectorAll('.checkin-btn').forEach(btn => {
+        const val = btn.getAttribute('data-feeling') || '';
+        btn.classList.toggle('active', val === current);
+      });
+      if (morningCheckinNote) {
+        if (current === 'great') morningCheckinNote.textContent = "Today's profile: Great.";
+        else if (current === 'okay') morningCheckinNote.textContent = "Today's profile: Okay.";
+        else if (current === 'low') morningCheckinNote.textContent = "Today's profile: Low energy.";
+        else morningCheckinNote.textContent = "Optional, but helps tailor today's plan.";
+      }
     }
 
     function trackEvent(event, props) {
@@ -1332,6 +1425,8 @@
     function buildPreferenceNotes() {
       const notes = [];
       getActiveQuickPrefs().forEach(p => notes.push(p));
+      const mood = morningCheckinInstruction(readMorningCheckin());
+      if (mood) notes.push(mood);
       const feedback = readMealFeedback();
       const liked = [];
       const disliked = [];
@@ -2010,6 +2105,19 @@
       nextTweakBtn.addEventListener('click', nudgeTweaks);
     }
 
+    if (morningCheckinActions) {
+      morningCheckinActions.addEventListener('click', (e) => {
+        const target = e.target;
+        if (!target || !target.classList || !target.classList.contains('checkin-btn')) return;
+        const value = target.getAttribute('data-feeling') || '';
+        const current = readMorningCheckin();
+        const next = current === value ? '' : value;
+        writeMorningCheckin(next);
+        updateMorningCheckinUI();
+        trackEvent('morning_checkin_selected', { feeling: next || 'none' });
+      });
+    }
+
     if (planCommitCheckbox) {
       planCommitCheckbox.addEventListener('change', () => {
         const v = !!planCommitCheckbox.checked;
@@ -2431,6 +2539,7 @@
     updateBetaFeedbackButtons();
     maybeShowBetaFeedbackCard();
     applySavedQuickPrefs();
+    updateMorningCheckinUI();
     checkConnection();
   </script>
 </body>
