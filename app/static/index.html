@@ -1084,6 +1084,9 @@
     let planMode = 'daily';
     let hasTodayDailyPlan = false;
     let todayDailyPlanId = null;
+    let hasRecentWeeklyPlan = false;
+    let recentWeeklyPlanId = null;
+    let recentWeeklyDays = null;
     let suppressTodayReuseToast = false;
     let lastGroceryList = [];
     let lastPlan = null;
@@ -1120,7 +1123,7 @@
       modeDaily.setAttribute('aria-selected', !isWeekly);
       modeWeekly.setAttribute('aria-selected', isWeekly);
       if (isWeekly) {
-        getPlanBtn.textContent = 'Get weekly plan';
+        getPlanBtn.textContent = hasRecentWeeklyPlan ? 'View weekly plan' : 'Get weekly plan';
       } else {
         getPlanBtn.textContent = hasTodayDailyPlan ? "View today's plan" : "Get today's plan";
       }
@@ -1497,6 +1500,9 @@
         if (!r.ok) {
           hasTodayDailyPlan = false;
           todayDailyPlanId = null;
+          hasRecentWeeklyPlan = false;
+          recentWeeklyPlanId = null;
+          recentWeeklyDays = null;
           historyEmpty.innerHTML = '<p class="history-empty-desc">No history yet.</p>';
           historyEmpty.style.display = 'block';
           historyList.innerHTML = '';
@@ -1507,12 +1513,18 @@
         if (!items.length) {
           hasTodayDailyPlan = false;
           todayDailyPlanId = null;
+          hasRecentWeeklyPlan = false;
+          recentWeeklyPlanId = null;
+          recentWeeklyDays = null;
           historyEmpty.style.display = 'block';
           return;
         }
         // Completion loop: if today's daily plan is already available, users should view it instead of regenerating.
         hasTodayDailyPlan = false;
         todayDailyPlanId = null;
+        hasRecentWeeklyPlan = false;
+        recentWeeklyPlanId = null;
+        recentWeeklyDays = null;
         try {
           const todayYmd = toLocalYmd(new Date());
           const todayItem = items.find(item => {
@@ -1529,8 +1541,25 @@
             todayDailyPlanId = todayItem.id;
           }
         } catch (_) {}
+
+        // Weekly completion loop: allow reopening the most recent weekly plan (even if it wasn't generated today).
+        try {
+          const weeklyItem = items.find(item => item && item.is_weekly);
+          if (weeklyItem && weeklyItem.id) {
+            hasRecentWeeklyPlan = true;
+            recentWeeklyPlanId = weeklyItem.id;
+            recentWeeklyDays = weeklyItem.weekly_days || null;
+          }
+        } catch (_) {}
+
         if (planMode === 'daily') {
           getPlanBtn.textContent = hasTodayDailyPlan ? "View today's plan" : "Get today's plan";
+        }
+        if (planMode === 'weekly') {
+          getPlanBtn.textContent = hasRecentWeeklyPlan ? 'View weekly plan' : 'Get weekly plan';
+          if (hasRecentWeeklyPlan && recentWeeklyDays) {
+            try { weeklyDays.value = String(recentWeeklyDays); } catch (_) {}
+          }
         }
 
         if (planMode === 'daily' && hasTodayDailyPlan && !suppressTodayReuseToast) {
@@ -2018,6 +2047,21 @@
         }
         return;
       }
+      if (isWeekly && hasRecentWeeklyPlan && recentWeeklyPlanId) {
+        getPlanBtn.disabled = true;
+        getPlanBtn.innerHTML = '<span class="spinner"></span> Opening weekly plan…';
+        try {
+          await reopenPlan(recentWeeklyPlanId, true);
+          trackEvent('plan_open_existing_weekly', { days: recentWeeklyDays || undefined });
+        } catch (_) {
+          trackEvent('plan_open_existing_weekly_error');
+          showMessage('Could not open weekly plan. Try again.', 'error');
+        } finally {
+          getPlanBtn.disabled = false;
+          getPlanBtn.textContent = 'View weekly plan';
+        }
+        return;
+      }
 
       getPlanBtn.disabled = true;
       const days = parseInt(weeklyDays.value, 10) || 7;
@@ -2085,7 +2129,9 @@
         showMessage('Request failed. Check your connection and try again.', 'error');
       } finally {
         getPlanBtn.disabled = false;
-        getPlanBtn.textContent = isWeekly ? 'Get weekly plan' : (hasTodayDailyPlan ? "View today's plan" : "Get today's plan");
+        getPlanBtn.textContent = isWeekly
+          ? (hasRecentWeeklyPlan ? 'View weekly plan' : 'Get weekly plan')
+          : (hasTodayDailyPlan ? "View today's plan" : "Get today's plan");
       }
     });
 
