@@ -491,18 +491,62 @@ def test_admin_beta_page_returns_html_when_authed(auth_headers, client):
     assert "Beta Ops" in response.text
 
 
+def test_admin_update_issue_triage_requires_auth(client):
+    response = client.put("/admin/beta-issues/abc12345/triage", json={"severity": "P1", "status": "new"})
+    assert response.status_code == 401
+
+
+@patch("app.main.update_support_issue_triage")
+def test_admin_update_issue_triage_accepts_valid_payload(mock_update, auth_headers, client):
+    mock_update.return_value = True
+    response = client.put(
+        "/admin/beta-issues/abc12345/triage",
+        headers=auth_headers,
+        json={"severity": "P1", "status": "in_progress", "owner": "alex"},
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
+    mock_update.assert_called_once()
+
+
+@patch("app.main.update_support_issue_triage")
+def test_admin_update_issue_triage_rejects_invalid_field_types(mock_update, auth_headers, client):
+    response = client.put(
+        "/admin/beta-issues/abc12345/triage",
+        headers=auth_headers,
+        json={"severity": 1},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "severity must be a string"
+    mock_update.assert_not_called()
+
+
+@patch("app.main.update_support_issue_triage")
+def test_admin_update_issue_triage_returns_404_when_missing(mock_update, auth_headers, client):
+    mock_update.return_value = False
+    response = client.put(
+        "/admin/beta-issues/missing/triage",
+        headers=auth_headers,
+        json={"status": "resolved"},
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Issue not found"
+
+
 @patch("app.main.get_beta_metrics_summary")
 def test_admin_beta_metrics_returns_summary(mock_summary, auth_headers, client):
     mock_summary.return_value = {
         "events_24h": {"plan_generate_started": 3},
         "events_7d": {"plan_generate_started": 10},
         "recent_issue_reports": [],
+        "triage_summary": {"unresolved_total": 1, "unresolved_p0": 0},
     }
     response = client.get("/admin/beta-metrics", headers=auth_headers)
     assert response.status_code == 200
     data = response.json()
     assert "events_24h" in data
     assert data["events_7d"]["plan_generate_started"] == 10
+    assert data["triage_summary"]["unresolved_total"] == 1
 
 
 @patch("app.main.get_plans")

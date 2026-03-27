@@ -139,11 +139,27 @@ def init_db() -> None:
                     message TEXT NOT NULL,
                     page TEXT,
                     app_version TEXT,
+                    triage_severity TEXT,
+                    triage_status TEXT DEFAULT 'new',
+                    triage_owner TEXT,
+                    triaged_at TIMESTAMPTZ,
+                    resolved_at TIMESTAMPTZ,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
                 """
             )
             cur.execute("CREATE INDEX IF NOT EXISTS idx_support_issue_reports_created_at ON support_issue_reports(created_at)")
+            for col_sql in (
+                "ALTER TABLE support_issue_reports ADD COLUMN triage_severity TEXT",
+                "ALTER TABLE support_issue_reports ADD COLUMN triage_status TEXT DEFAULT 'new'",
+                "ALTER TABLE support_issue_reports ADD COLUMN triage_owner TEXT",
+                "ALTER TABLE support_issue_reports ADD COLUMN triaged_at TIMESTAMPTZ",
+                "ALTER TABLE support_issue_reports ADD COLUMN resolved_at TIMESTAMPTZ",
+            ):
+                try:
+                    cur.execute(col_sql)
+                except Exception:
+                    pass
             try:
                 cur.execute("ALTER TABLE users ADD COLUMN measurement_system TEXT DEFAULT 'us'")
             except Exception:
@@ -222,11 +238,27 @@ def init_db() -> None:
                     message TEXT NOT NULL,
                     page TEXT,
                     app_version TEXT,
+                    triage_severity TEXT,
+                    triage_status TEXT,
+                    triage_owner TEXT,
+                    triaged_at TEXT,
+                    resolved_at TEXT,
                     created_at TEXT NOT NULL
                 )
                 """
             )
             cur.execute("CREATE INDEX IF NOT EXISTS idx_support_issue_reports_created_at ON support_issue_reports(created_at)")
+            for col, col_type in (
+                ("triage_severity", "TEXT"),
+                ("triage_status", "TEXT"),
+                ("triage_owner", "TEXT"),
+                ("triaged_at", "TEXT"),
+                ("resolved_at", "TEXT"),
+            ):
+                try:
+                    cur.execute(f"ALTER TABLE support_issue_reports ADD COLUMN {col} {col_type}")
+                except sqlite3.OperationalError:
+                    pass
 
 
 def get_oura_tokens(user_id: int = DEFAULT_USER_ID) -> dict[str, Any] | None:
@@ -697,6 +729,52 @@ def save_support_issue_report(
             )
 
 
+def update_support_issue_triage(
+    issue_id: str,
+    severity: str | None = None,
+    status: str | None = None,
+    owner: str | None = None,
+) -> bool:
+    """Update triage metadata for a support issue by issue_id. Returns True if row updated."""
+    severity_val = (severity or "").strip().upper() or None
+    status_val = (status or "").strip().lower() or None
+    owner_val = (owner or "").strip() or None
+
+    if severity_val is not None and severity_val not in ("P0", "P1", "P2"):
+        raise ValueError("severity must be one of: P0, P1, P2")
+    if status_val is not None and status_val not in ("new", "in_progress", "resolved"):
+        raise ValueError("status must be one of: new, in_progress, resolved")
+
+    updates: list[str] = []
+    params: list[Any] = []
+    if severity is not None:
+        updates.append("triage_severity = ?")
+        params.append(severity_val)
+    if status is not None:
+        updates.append("triage_status = ?")
+        params.append(status_val)
+        if status_val == "resolved":
+            updates.append("resolved_at = ?")
+            params.append(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+        else:
+            updates.append("resolved_at = ?")
+            params.append(None)
+    if owner is not None:
+        updates.append("triage_owner = ?")
+        params.append(owner_val)
+    if not updates:
+        return False
+    updates.append("triaged_at = ?")
+    params.append(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    params.append(issue_id)
+
+    with _get_conn() as conn:
+        cur = conn.cursor()
+        sql = "UPDATE support_issue_reports SET " + ", ".join(updates) + " WHERE issue_id = ?"
+        cur.execute(_q(sql), tuple(params))
+        return int(cur.rowcount or 0) > 0
+
+
 def get_beta_metrics_summary() -> dict[str, Any]:
     """Return analytics event counts for last 24h/7d and recent issue reports."""
     with _get_conn() as conn:
@@ -724,7 +802,7 @@ def get_beta_metrics_summary() -> dict[str, Any]:
             rows7 = cur.fetchall() or []
             cur.execute(
                 """
-                SELECT issue_id, user_id, message, page, app_version, created_at
+                SELECT issue_id, user_id, message, page, app_version, triage_severity, triage_status, triage_owner, triaged_at, resolved_at, created_at
                 FROM support_issue_reports
                 ORDER BY created_at DESC
                 LIMIT 20
@@ -754,7 +832,7 @@ def get_beta_metrics_summary() -> dict[str, Any]:
             rows7 = cur.fetchall() or []
             cur.execute(
                 """
-                SELECT issue_id, user_id, message, page, app_version, created_at
+                SELECT issue_id, user_id, message, page, app_version, triage_severity, triage_status, triage_owner, triaged_at, resolved_at, created_at
                 FROM support_issue_reports
                 ORDER BY created_at DESC
                 LIMIT 20
@@ -778,10 +856,19 @@ def get_beta_metrics_summary() -> dict[str, Any]:
                 "message": str(r[2]),
                 "page": str(r[3]) if r[3] is not None else None,
                 "app_version": str(r[4]) if r[4] is not None else None,
-                "created_at": (r[5].isoformat().replace("+00:00", "Z") if hasattr(r[5], "isoformat") else str(r[5])),
+                "triage_severity": str(r[5]) if r[5] is not None else None,
+                "triage_status": str(r[6]) if r[6] is not None else "new",
+                "triage_owner": str(r[7]) if r[7] is not None else None,
+                "triaged_at": (r[8].isoformat().replace("+00:00", "Z") if hasattr(r[8], "isoformat") else (str(r[8]) if r[8] is not None else None)),
+                "resolved_at": (r[9].isoformat().replace("+00:00", "Z") if hasattr(r[9], "isoformat") else (str(r[9]) if r[9] is not None else None)),
+                "created_at": (r[10].isoformat().replace("+00:00", "Z") if hasattr(r[10], "isoformat") else str(r[10])),
             }
             for r in issues
         ],
+        "triage_summary": {
+            "unresolved_total": sum(1 for r in issues if str(r[6] or "new") != "resolved"),
+            "unresolved_p0": sum(1 for r in issues if str(r[6] or "new") != "resolved" and str(r[5] or "") == "P0"),
+        },
     }
 
 def get_user_preferences(user_id: int = DEFAULT_USER_ID) -> dict[str, Any]:

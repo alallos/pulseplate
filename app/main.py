@@ -73,6 +73,7 @@ from app.db import (
     save_support_issue_report,
     save_beta_analytics_event,
     get_beta_metrics_summary,
+    update_support_issue_triage,
 )
 
 # Load environment variables early (even if .env is empty for now)
@@ -644,6 +645,32 @@ async def admin_beta_metrics(user_id: CurrentUserId):
     """Return beta funnel metrics and recent issue reports (auth required)."""
     _ = user_id
     return get_beta_metrics_summary()
+
+
+@app.put("/admin/beta-issues/{issue_id}/triage")
+async def admin_update_issue_triage(
+    issue_id: str,
+    user_id: CurrentUserId,
+    payload: dict = Body(..., description="Triage update payload"),
+):
+    """Update issue triage metadata (severity/status/owner). Auth required."""
+    _ = user_id
+    severity = payload.get("severity")
+    status = payload.get("status")
+    owner = payload.get("owner")
+    if severity is not None and not isinstance(severity, str):
+        raise HTTPException(status_code=400, detail="severity must be a string")
+    if status is not None and not isinstance(status, str):
+        raise HTTPException(status_code=400, detail="status must be a string")
+    if owner is not None and not isinstance(owner, str):
+        raise HTTPException(status_code=400, detail="owner must be a string")
+    try:
+        ok = update_support_issue_triage(issue_id=issue_id, severity=severity, status=status, owner=owner)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    if not ok:
+        raise HTTPException(status_code=404, detail="Issue not found")
+    return {"status": "ok", "issue_id": issue_id}
 
 
 @app.get("/biometrics/oura", response_model=BiometricData)
