@@ -47,11 +47,21 @@ Rules:
 - summary: One clear sentence explaining why this plan fits today's recovery and goals.
 - meals: Include at least 3 main eating occasions (e.g. Breakfast, Lunch, Dinner) plus 1–2 snacks. Each meal must have type, name, description, and calories (integer).
 - grocery_list: Every ingredient needed for the day, each with "item" and "quantity". No duplicates.
+- Constraint priority (when conflicts occur):
+  1) Safety + strict exclusions: allergies (hard exclude) and anything clearly unsafe for the listed allergies.
+  2) Units: honor measurement_system for every quantity (hard constraint).
+  3) Calorie target: keep total calories close to calorie_target (as close as possible).
+  4) Diet style + goals: shape ingredients/flavor/structure (mediterranean/keto/etc., fat_loss/stable_glucose/etc.).
+  5) plan_preferences: treat each item as a high-priority instruction, but never override safety/allergy exclusions or units.
 - Units: If the user's measurement_system is "us", use US customary units for all quantities (cups, fl oz, lb, oz, tbsp, tsp). If "metric", use metric (g, kg, ml, L). Apply to both meal descriptions and grocery_list quantities.
 - Respect allergies strictly (e.g. if nuts: zero tree nuts or peanuts).
-- Total meal calories should be close to the user's calorie_target.
+- Calorie distribution: aim for a balanced spread across meals (roughly breakfast 25–35%, lunch 30–40%, dinner 25–35%, snacks fill the remainder) while still keeping total close to calorie_target.
+- Biometrics-to-style rubric (general wellness, not medical advice):
+  - If recovery_status is "optimal" or "good" and sleep_score/HRV are better: you may include slightly more variety and cooking ambition, but keep it realistic.
+  - If recovery_status is "fair" or "low" and/or sleep_score is low: prioritize simpler meals, gentler flavors/spice, comfortable textures, hydration-friendly snacks.
+  - resting_hr_bpm and steps_yesterday should influence "energy level" tone (more supportive/steady energy when lower).
 - Diet style (mediterranean, keto, etc.) and goals (fat_loss, stable_glucose, etc.) must shape the plan.
-- If plan_preferences is provided, treat each item as a high-priority user instruction."""
+- If plan_preferences is provided, treat each item as a high-priority user instruction (after applying safety/allergy and unit rules)."""
 
 # Weekly batch plan: JSON schema for Grok
 WEEKLY_MEAL_PLAN_JSON_SCHEMA = """
@@ -77,9 +87,15 @@ CRITICAL: Respond with ONLY valid JSON. No markdown, no code fences, no text bef
 """ + WEEKLY_MEAL_PLAN_JSON_SCHEMA.strip() + """
 
 Rules:
+- Constraint priority (when conflicts occur):
+  1) Safety + strict exclusions: allergies (hard exclude).
+  2) Units: honor measurement_system for every quantity (hard constraint).
+  3) Per-day calorie target: aim for each day’s meals to land close to calorie_target (as close as possible).
+  4) Diet style + goals: shape ingredients/flavor/structure across the week.
+  5) plan_preferences: treat each item as a high-priority instruction, but never override safety/allergy exclusions or units.
 - summary: One paragraph explaining the weekly approach (batch-friendly, shared ingredients, how it fits recovery/goals).
 - days: Array of 5–7 day objects. Each day has "day" (e.g. Monday) and "meals" (3–4 meals: breakfast, lunch, dinner, optional snack). Use quick-assembly breakfasts (e.g. overnight oats base + daily toppings, or batch-made frittata) since the plan is used after overnight data.
-- grocery_list: ONE consolidated list for the whole week. Quantities scaled for the week. Include "prep_notes" where helpful (e.g. "Batch grill Sunday", "Cook in bulk", "Overnight oats base for week"). Minimize waste and reuse ingredients across days.
+- grocery_list: ONE consolidated list for the whole week. Quantities scaled for the week. Include "prep_notes" where helpful (e.g. "Batch grill Sunday", "Cook in bulk", "Overnight oats base for week"). Minimize waste and reuse ingredients across days. Use specific ingredient names (avoid vague placeholders like "protein" or "greens").
 - Units: If the user's measurement_system is "us", use US customary units (cups, fl oz, lb, oz, tbsp, tsp) for all quantities in days and grocery_list. If "metric", use metric (g, kg, ml, L).
 - Batch-friendly: recipes that scale, store well, reheat well; shared bases (e.g. large batch of grilled chicken, lentil soup, roasted veggies).
 - Respect allergies strictly. Match diet_style and goals. Target calorie_target per day.
@@ -93,7 +109,7 @@ def _build_user_prompt(data: BiometricData) -> str:
         "Generate today's meal plan and grocery list for this user. "
         "Return ONLY the JSON object, no other text.\n\n"
         "Biometrics and preferences:\n"
-        f"{data.model_dump_json(indent=2)}"
+        f"{data.model_dump_json(indent=2, exclude_none=True)}"
     )
 
 
@@ -107,7 +123,7 @@ def _build_weekly_user_prompt(data: BiometricData, days: int) -> str:
         f"Generate a {days}-day weekly batch meal plan. Days to include: {', '.join(requested)}. "
         "Return ONLY the JSON object, no other text.\n\n"
         "Biometrics and preferences:\n"
-        f"{data.model_dump_json(indent=2)}"
+        f"{data.model_dump_json(indent=2, exclude_none=True)}"
         f"{extra}"
     )
 
