@@ -99,6 +99,28 @@
     .warn { color: var(--warn); }
     .error { color: var(--error); }
     .helper { font-size: 0.8rem; color: var(--muted); margin-top: 0.6rem; }
+    .tools {
+      margin-top: 0.45rem;
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .tool-chip {
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.2rem 0.55rem;
+      font-size: 0.76rem;
+      color: var(--muted);
+      background: rgba(255,255,255,0.03);
+      cursor: pointer;
+      user-select: none;
+    }
+    .tool-chip.active {
+      color: var(--text);
+      border-color: rgba(88,166,255,0.9);
+      background: rgba(88,166,255,0.2);
+    }
     @media (max-width: 800px) {
       .grid { grid-template-columns: 1fr; }
       .row { grid-template-columns: 1fr; }
@@ -140,6 +162,10 @@
     <div class="row">
       <div class="card">
         <h2 class="section-title">Recent issue reports</h2>
+        <div class="tools">
+          <button type="button" class="tool-chip active" id="filterUnresolvedBtn">Unresolved only</button>
+          <button type="button" class="tool-chip active" id="sortSeverityBtn">P0 first</button>
+        </div>
         <ul class="issues" id="issuesList">
           <li class="muted">Loading...</li>
         </ul>
@@ -172,8 +198,19 @@
     const issuesList = document.getElementById('issuesList');
     const statusLine = document.getElementById('statusLine');
     const refreshBtn = document.getElementById('refreshBtn');
+    const filterUnresolvedBtn = document.getElementById('filterUnresolvedBtn');
+    const sortSeverityBtn = document.getElementById('sortSeverityBtn');
+    let unresolvedOnly = true;
+    let severityFirst = true;
 
     function n(v) { return Number(v || 0); }
+    function isResolved(item) { return String(item?.triage_status || 'new') === 'resolved'; }
+    function sevRank(s) {
+      if (s === 'P0') return 0;
+      if (s === 'P1') return 1;
+      if (s === 'P2') return 2;
+      return 3;
+    }
 
     async function saveTriage(issueId, severity, status, owner) {
       const r = await fetch('/admin/beta-issues/' + encodeURIComponent(issueId) + '/triage', {
@@ -229,11 +266,22 @@
         kpiIssueHint.textContent = 'Recent reports: ' + String(issues.length);
         kpiUnresolved.textContent = 'Unresolved: ' + String(n(triage.unresolved_total)) + ' · P0: ' + String(n(triage.unresolved_p0));
 
-        if (!issues.length) {
+        let visible = issues.slice();
+        if (unresolvedOnly) visible = visible.filter(i => !isResolved(i));
+        if (severityFirst) {
+          visible.sort((a, b) => {
+            const d = sevRank(String(a?.triage_severity || '')) - sevRank(String(b?.triage_severity || ''));
+            if (d !== 0) return d;
+            const ta = new Date(a?.created_at || 0).getTime();
+            const tb = new Date(b?.created_at || 0).getTime();
+            return (tb || 0) - (ta || 0);
+          });
+        }
+        if (!visible.length) {
           issuesList.innerHTML = '<li class="muted">No issue reports yet.</li>';
         } else {
           issuesList.innerHTML = '';
-          issues.slice(0, 12).forEach(item => {
+          visible.slice(0, 20).forEach(item => {
             const li = document.createElement('li');
             const msg = String(item.message || '').trim();
             const page = item.page ? ' page=' + item.page : '';
@@ -301,7 +349,24 @@
       }
     }
 
+    function updateToolChipStates() {
+      filterUnresolvedBtn.classList.toggle('active', unresolvedOnly);
+      sortSeverityBtn.classList.toggle('active', severityFirst);
+    }
+
+    filterUnresolvedBtn.addEventListener('click', () => {
+      unresolvedOnly = !unresolvedOnly;
+      updateToolChipStates();
+      loadMetrics();
+    });
+    sortSeverityBtn.addEventListener('click', () => {
+      severityFirst = !severityFirst;
+      updateToolChipStates();
+      loadMetrics();
+    });
+
     refreshBtn.addEventListener('click', loadMetrics);
+    updateToolChipStates();
     loadMetrics();
   </script>
 </body>
