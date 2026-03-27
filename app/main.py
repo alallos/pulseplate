@@ -658,14 +658,27 @@ async def admin_update_issue_triage(
     severity = payload.get("severity")
     status = payload.get("status")
     owner = payload.get("owner")
+    mark_responded = payload.get("mark_responded")
+    response_note = payload.get("response_note")
     if severity is not None and not isinstance(severity, str):
         raise HTTPException(status_code=400, detail="severity must be a string")
     if status is not None and not isinstance(status, str):
         raise HTTPException(status_code=400, detail="status must be a string")
     if owner is not None and not isinstance(owner, str):
         raise HTTPException(status_code=400, detail="owner must be a string")
+    if mark_responded is not None and not isinstance(mark_responded, bool):
+        raise HTTPException(status_code=400, detail="mark_responded must be a boolean")
+    if response_note is not None and not isinstance(response_note, str):
+        raise HTTPException(status_code=400, detail="response_note must be a string")
     try:
-        ok = update_support_issue_triage(issue_id=issue_id, severity=severity, status=status, owner=owner)
+        ok = update_support_issue_triage(
+            issue_id=issue_id,
+            severity=severity,
+            status=status,
+            owner=owner,
+            mark_responded=mark_responded,
+            response_note=response_note,
+        )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     if not ok:

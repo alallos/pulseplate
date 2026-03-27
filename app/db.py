@@ -144,6 +144,8 @@ def init_db() -> None:
                     triage_owner TEXT,
                     triaged_at TIMESTAMPTZ,
                     resolved_at TIMESTAMPTZ,
+                    last_response_at TIMESTAMPTZ,
+                    response_note TEXT,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
                 )
                 """
@@ -155,6 +157,8 @@ def init_db() -> None:
                 "ALTER TABLE support_issue_reports ADD COLUMN triage_owner TEXT",
                 "ALTER TABLE support_issue_reports ADD COLUMN triaged_at TIMESTAMPTZ",
                 "ALTER TABLE support_issue_reports ADD COLUMN resolved_at TIMESTAMPTZ",
+                "ALTER TABLE support_issue_reports ADD COLUMN last_response_at TIMESTAMPTZ",
+                "ALTER TABLE support_issue_reports ADD COLUMN response_note TEXT",
             ):
                 try:
                     cur.execute(col_sql)
@@ -243,6 +247,8 @@ def init_db() -> None:
                     triage_owner TEXT,
                     triaged_at TEXT,
                     resolved_at TEXT,
+                    last_response_at TEXT,
+                    response_note TEXT,
                     created_at TEXT NOT NULL
                 )
                 """
@@ -254,6 +260,8 @@ def init_db() -> None:
                 ("triage_owner", "TEXT"),
                 ("triaged_at", "TEXT"),
                 ("resolved_at", "TEXT"),
+                ("last_response_at", "TEXT"),
+                ("response_note", "TEXT"),
             ):
                 try:
                     cur.execute(f"ALTER TABLE support_issue_reports ADD COLUMN {col} {col_type}")
@@ -734,6 +742,8 @@ def update_support_issue_triage(
     severity: str | None = None,
     status: str | None = None,
     owner: str | None = None,
+    mark_responded: bool | None = None,
+    response_note: str | None = None,
 ) -> bool:
     """Update triage metadata for a support issue by issue_id. Returns True if row updated."""
     severity_val = (severity or "").strip().upper() or None
@@ -744,6 +754,8 @@ def update_support_issue_triage(
         raise ValueError("severity must be one of: P0, P1, P2")
     if status_val is not None and status_val not in ("new", "in_progress", "resolved"):
         raise ValueError("status must be one of: new, in_progress, resolved")
+    if response_note is not None and len(response_note) > 1000:
+        raise ValueError("response_note must be <= 1000 characters")
 
     updates: list[str] = []
     params: list[Any] = []
@@ -762,6 +774,12 @@ def update_support_issue_triage(
     if owner is not None:
         updates.append("triage_owner = ?")
         params.append(owner_val)
+    if mark_responded is not None:
+        updates.append("last_response_at = ?")
+        params.append(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()) if mark_responded else None)
+    if response_note is not None:
+        updates.append("response_note = ?")
+        params.append((response_note or "").strip() or None)
     if not updates:
         return False
     updates.append("triaged_at = ?")
@@ -802,7 +820,7 @@ def get_beta_metrics_summary() -> dict[str, Any]:
             rows7 = cur.fetchall() or []
             cur.execute(
                 """
-                SELECT issue_id, user_id, message, page, app_version, triage_severity, triage_status, triage_owner, triaged_at, resolved_at, created_at
+                SELECT issue_id, user_id, message, page, app_version, triage_severity, triage_status, triage_owner, triaged_at, resolved_at, last_response_at, response_note, created_at
                 FROM support_issue_reports
                 ORDER BY created_at DESC
                 LIMIT 20
@@ -832,7 +850,7 @@ def get_beta_metrics_summary() -> dict[str, Any]:
             rows7 = cur.fetchall() or []
             cur.execute(
                 """
-                SELECT issue_id, user_id, message, page, app_version, triage_severity, triage_status, triage_owner, triaged_at, resolved_at, created_at
+                SELECT issue_id, user_id, message, page, app_version, triage_severity, triage_status, triage_owner, triaged_at, resolved_at, last_response_at, response_note, created_at
                 FROM support_issue_reports
                 ORDER BY created_at DESC
                 LIMIT 20
@@ -846,28 +864,66 @@ def get_beta_metrics_summary() -> dict[str, Any]:
             out[str(r[0])] = int(r[1] or 0)
         return out
 
+    def _to_iso(v: Any) -> str | None:
+        if v is None:
+            return None
+        return v.isoformat().replace("+00:00", "Z") if hasattr(v, "isoformat") else str(v)
+
+    def _parse_ts(v: Any) -> float | None:
+        if v is None:
+            return None
+        if hasattr(v, "timestamp"):
+            try:
+                return float(v.timestamp())
+            except Exception:
+                return None
+        s = str(v).strip()
+        if not s:
+            return None
+        # Accept timestamps like 2026-03-26T12:34:56Z or 2026-03-26 12:34:56
+        s = s.replace("Z", "")
+        s = s.replace("T", " ")
+        try:
+            return time.mktime(time.strptime(s[:19], "%Y-%m-%d %H:%M:%S"))
+        except Exception:
+            return None
+
+    recent_issue_reports = [
+        {
+            "issue_id": str(r[0]),
+            "user_id": int(r[1]) if r[1] is not None else None,
+            "message": str(r[2]),
+            "page": str(r[3]) if r[3] is not None else None,
+            "app_version": str(r[4]) if r[4] is not None else None,
+            "triage_severity": str(r[5]) if r[5] is not None else None,
+            "triage_status": str(r[6]) if r[6] is not None else "new",
+            "triage_owner": str(r[7]) if r[7] is not None else None,
+            "triaged_at": _to_iso(r[8]),
+            "resolved_at": _to_iso(r[9]),
+            "last_response_at": _to_iso(r[10]),
+            "response_note": str(r[11]) if r[11] is not None else None,
+            "created_at": _to_iso(r[12]) or "",
+        }
+        for r in issues
+    ]
+
+    now_ts = time.time()
+    needs_reply_24h = 0
+    for item in recent_issue_reports:
+        if item["triage_status"] == "resolved":
+            continue
+        lr_ts = _parse_ts(item.get("last_response_at"))
+        if lr_ts is None or (now_ts - lr_ts) > (24 * 60 * 60):
+            needs_reply_24h += 1
+
     return {
         "events_24h": _rows_to_map(rows24),
         "events_7d": _rows_to_map(rows7),
-        "recent_issue_reports": [
-            {
-                "issue_id": str(r[0]),
-                "user_id": int(r[1]) if r[1] is not None else None,
-                "message": str(r[2]),
-                "page": str(r[3]) if r[3] is not None else None,
-                "app_version": str(r[4]) if r[4] is not None else None,
-                "triage_severity": str(r[5]) if r[5] is not None else None,
-                "triage_status": str(r[6]) if r[6] is not None else "new",
-                "triage_owner": str(r[7]) if r[7] is not None else None,
-                "triaged_at": (r[8].isoformat().replace("+00:00", "Z") if hasattr(r[8], "isoformat") else (str(r[8]) if r[8] is not None else None)),
-                "resolved_at": (r[9].isoformat().replace("+00:00", "Z") if hasattr(r[9], "isoformat") else (str(r[9]) if r[9] is not None else None)),
-                "created_at": (r[10].isoformat().replace("+00:00", "Z") if hasattr(r[10], "isoformat") else str(r[10])),
-            }
-            for r in issues
-        ],
+        "recent_issue_reports": recent_issue_reports,
         "triage_summary": {
-            "unresolved_total": sum(1 for r in issues if str(r[6] or "new") != "resolved"),
-            "unresolved_p0": sum(1 for r in issues if str(r[6] or "new") != "resolved" and str(r[5] or "") == "P0"),
+            "unresolved_total": sum(1 for i in recent_issue_reports if i["triage_status"] != "resolved"),
+            "unresolved_p0": sum(1 for i in recent_issue_reports if i["triage_status"] != "resolved" and (i["triage_severity"] or "") == "P0"),
+            "needs_reply_24h": needs_reply_24h,
         },
     }
 

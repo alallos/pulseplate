@@ -502,7 +502,7 @@ def test_admin_update_issue_triage_accepts_valid_payload(mock_update, auth_heade
     response = client.put(
         "/admin/beta-issues/abc12345/triage",
         headers=auth_headers,
-        json={"severity": "P1", "status": "in_progress", "owner": "alex"},
+        json={"severity": "P1", "status": "in_progress", "owner": "alex", "mark_responded": True, "response_note": "sent follow-up"},
     )
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
@@ -518,6 +518,18 @@ def test_admin_update_issue_triage_rejects_invalid_field_types(mock_update, auth
     )
     assert response.status_code == 400
     assert response.json()["detail"] == "severity must be a string"
+    mock_update.assert_not_called()
+
+
+@patch("app.main.update_support_issue_triage")
+def test_admin_update_issue_triage_rejects_invalid_mark_responded_type(mock_update, auth_headers, client):
+    response = client.put(
+        "/admin/beta-issues/abc12345/triage",
+        headers=auth_headers,
+        json={"mark_responded": "yes"},
+    )
+    assert response.status_code == 400
+    assert response.json()["detail"] == "mark_responded must be a boolean"
     mock_update.assert_not_called()
 
 
@@ -539,7 +551,7 @@ def test_admin_beta_metrics_returns_summary(mock_summary, auth_headers, client):
         "events_24h": {"plan_generate_started": 3},
         "events_7d": {"plan_generate_started": 10},
         "recent_issue_reports": [],
-        "triage_summary": {"unresolved_total": 1, "unresolved_p0": 0},
+        "triage_summary": {"unresolved_total": 1, "unresolved_p0": 0, "needs_reply_24h": 1},
     }
     response = client.get("/admin/beta-metrics", headers=auth_headers)
     assert response.status_code == 200
@@ -547,6 +559,7 @@ def test_admin_beta_metrics_returns_summary(mock_summary, auth_headers, client):
     assert "events_24h" in data
     assert data["events_7d"]["plan_generate_started"] == 10
     assert data["triage_summary"]["unresolved_total"] == 1
+    assert data["triage_summary"]["needs_reply_24h"] == 1
 
 
 @patch("app.main.get_plans")

@@ -156,6 +156,7 @@
         <div class="kpi-value" id="kpiIssues24h">-</div>
         <div class="kpi-sub" id="kpiIssueHint">Recent reports: -</div>
         <div class="kpi-sub" id="kpiUnresolved">Unresolved: -</div>
+        <div class="kpi-sub" id="kpiNeedsReply">Needs reply (24h): -</div>
       </div>
     </div>
 
@@ -195,6 +196,7 @@
     const kpiIssues24h = document.getElementById('kpiIssues24h');
     const kpiIssueHint = document.getElementById('kpiIssueHint');
     const kpiUnresolved = document.getElementById('kpiUnresolved');
+    const kpiNeedsReply = document.getElementById('kpiNeedsReply');
     const issuesList = document.getElementById('issuesList');
     const statusLine = document.getElementById('statusLine');
     const refreshBtn = document.getElementById('refreshBtn');
@@ -212,12 +214,18 @@
       return 3;
     }
 
-    async function saveTriage(issueId, severity, status, owner) {
+    async function saveTriage(issueId, severity, status, owner, markResponded, responseNote) {
       const r = await fetch('/admin/beta-issues/' + encodeURIComponent(issueId) + '/triage', {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ severity, status, owner }),
+        body: JSON.stringify({
+          severity,
+          status,
+          owner,
+          mark_responded: markResponded,
+          response_note: responseNote,
+        }),
       });
       if (!r.ok) {
         let msg = 'Could not save triage update.';
@@ -265,6 +273,7 @@
         kpiIssues24h.textContent = String(issues24);
         kpiIssueHint.textContent = 'Recent reports: ' + String(issues.length);
         kpiUnresolved.textContent = 'Unresolved: ' + String(n(triage.unresolved_total)) + ' · P0: ' + String(n(triage.unresolved_p0));
+        kpiNeedsReply.textContent = 'Needs reply (24h): ' + String(n(triage.needs_reply_24h));
 
         let visible = issues.slice();
         if (unresolvedOnly) visible = visible.filter(i => !isResolved(i));
@@ -290,6 +299,8 @@
             const sev = item.triage_severity || '';
             const stat = item.triage_status || 'new';
             const owner = item.triage_owner || '';
+            const responseNote = item.response_note || '';
+            const respondedAt = item.last_response_at ? new Date(item.last_response_at).toLocaleString() : '';
             li.innerHTML =
               '<div>' + (msg || '(empty message)') + '</div>' +
               '<div class="issue-meta">' +
@@ -297,6 +308,7 @@
               (when ? '<span>' + when + '</span>' : '') +
               (page ? ' · ' + page : '') +
               (user ? ' · ' + user : '') +
+              (respondedAt ? ' · replied ' + respondedAt : '') +
               '</div>' +
               '<div style="display:flex; gap:0.4rem; flex-wrap:wrap; margin-top:0.4rem;">' +
               '<select data-role="sev" style="background:#0f1419;color:#e6edf3;border:1px solid #2d3a4d;border-radius:6px;padding:0.2rem 0.35rem;font-size:0.78rem;">' +
@@ -311,23 +323,32 @@
               '<option value="resolved"' + (stat === 'resolved' ? ' selected' : '') + '>resolved</option>' +
               '</select>' +
               '<input data-role="owner" placeholder="owner" value="' + String(owner).replace(/"/g, '&quot;') + '" style="background:#0f1419;color:#e6edf3;border:1px solid #2d3a4d;border-radius:6px;padding:0.2rem 0.35rem;font-size:0.78rem;min-width:90px;" />' +
+              '<input data-role="responseNote" placeholder="response note (optional)" value="' + String(responseNote).replace(/"/g, '&quot;') + '" style="background:#0f1419;color:#e6edf3;border:1px solid #2d3a4d;border-radius:6px;padding:0.2rem 0.35rem;font-size:0.78rem;min-width:160px;" />' +
+              '<button data-role="responded" class="btn" style="padding:0.2rem 0.5rem;font-size:0.78rem;">Mark responded</button>' +
               '<button data-role="save" class="btn" style="padding:0.2rem 0.5rem;font-size:0.78rem;">Save</button>' +
               '</div>';
             const saveBtn = li.querySelector('[data-role="save"]');
+            const respondedBtn = li.querySelector('[data-role="responded"]');
+            const setBusy = (busy) => {
+              if (saveBtn) saveBtn.disabled = !!busy;
+              if (respondedBtn) respondedBtn.disabled = !!busy;
+            };
             if (saveBtn) {
               saveBtn.addEventListener('click', async () => {
                 const sevEl = li.querySelector('[data-role="sev"]');
                 const statusEl = li.querySelector('[data-role="status"]');
                 const ownerEl = li.querySelector('[data-role="owner"]');
+                const responseNoteEl = li.querySelector('[data-role="responseNote"]');
                 const issueId = String(item.issue_id || '');
                 const payloadSeverity = sevEl ? sevEl.value : '';
                 const payloadStatus = statusEl ? statusEl.value : 'new';
                 const payloadOwner = ownerEl ? ownerEl.value : '';
-                saveBtn.disabled = true;
+                const payloadResponseNote = responseNoteEl ? responseNoteEl.value : '';
+                setBusy(true);
                 const label = saveBtn.textContent;
                 saveBtn.textContent = 'Saving...';
                 try {
-                  await saveTriage(issueId, payloadSeverity || null, payloadStatus || null, payloadOwner || null);
+                  await saveTriage(issueId, payloadSeverity || null, payloadStatus || null, payloadOwner || null, null, payloadResponseNote || null);
                   saveBtn.textContent = 'Saved';
                   setTimeout(() => { saveBtn.textContent = label; }, 900);
                   loadMetrics();
@@ -335,7 +356,28 @@
                   saveBtn.textContent = 'Retry';
                   statusLine.textContent = (e && e.message) ? e.message : 'Triage save failed.';
                 } finally {
-                  saveBtn.disabled = false;
+                  setBusy(false);
+                }
+              });
+            }
+            if (respondedBtn) {
+              respondedBtn.addEventListener('click', async () => {
+                const responseNoteEl = li.querySelector('[data-role="responseNote"]');
+                const issueId = String(item.issue_id || '');
+                const payloadResponseNote = responseNoteEl ? responseNoteEl.value : '';
+                const label = respondedBtn.textContent;
+                setBusy(true);
+                respondedBtn.textContent = 'Saving...';
+                try {
+                  await saveTriage(issueId, null, null, null, true, payloadResponseNote || null);
+                  respondedBtn.textContent = 'Saved';
+                  setTimeout(() => { respondedBtn.textContent = label; }, 900);
+                  loadMetrics();
+                } catch (e) {
+                  respondedBtn.textContent = 'Retry';
+                  statusLine.textContent = (e && e.message) ? e.message : 'Response update failed.';
+                } finally {
+                  setBusy(false);
                 }
               });
             }
