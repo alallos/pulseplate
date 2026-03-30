@@ -137,6 +137,7 @@
       <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
         <a class="btn" href="/">Back to app</a>
         <button class="btn" id="refreshBtn" type="button">Refresh</button>
+        <button class="btn" id="exportCsvBtn" type="button">Export issues CSV</button>
       </div>
     </div>
 
@@ -200,6 +201,7 @@
     const issuesList = document.getElementById('issuesList');
     const statusLine = document.getElementById('statusLine');
     const refreshBtn = document.getElementById('refreshBtn');
+    const exportCsvBtn = document.getElementById('exportCsvBtn');
     const filterUnresolvedBtn = document.getElementById('filterUnresolvedBtn');
     const sortSeverityBtn = document.getElementById('sortSeverityBtn');
     let unresolvedOnly = true;
@@ -407,7 +409,41 @@
       loadMetrics();
     });
 
+    async function exportIssuesCsv() {
+      statusLine.textContent = 'Preparing CSV…';
+      exportCsvBtn.disabled = true;
+      const label = exportCsvBtn.textContent;
+      try {
+        const r = await fetch('/admin/beta-issues-export?limit=2000', { credentials: 'include' });
+        if (!r.ok) {
+          statusLine.textContent = r.status === 401
+            ? 'Not authorized. Log in to PulsePlate first.'
+            : 'Could not export CSV.';
+          return;
+        }
+        const blob = await r.blob();
+        const cd = r.headers.get('Content-Disposition') || '';
+        const m = /filename="([^"]+)"/.exec(cd);
+        const name = (m && m[1]) ? m[1] : 'pulseplate-beta-issues.csv';
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        statusLine.textContent = 'CSV downloaded · Last refresh: ' + new Date().toLocaleString();
+      } catch (_) {
+        statusLine.textContent = 'Export failed. Check connection.';
+      } finally {
+        exportCsvBtn.disabled = false;
+        exportCsvBtn.textContent = label;
+      }
+    }
+
     refreshBtn.addEventListener('click', loadMetrics);
+    exportCsvBtn.addEventListener('click', exportIssuesCsv);
     updateToolChipStates();
     loadMetrics();
   </script>

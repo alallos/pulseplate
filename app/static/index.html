@@ -1212,6 +1212,86 @@
     const MORNING_CHECKIN_KEY_PREFIX = 'pulseplate_morning_checkin_';
     const BETA_FEEDBACK_SENT_KEY = 'pulseplate_beta_feedback_sent_v1';
 
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function scrollToPlanCTA() {
+      try {
+        getPlanBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        getPlanBtn.focus({ preventScroll: true });
+      } catch (_) {}
+    }
+
+    function bindBiometricsRetry() {
+      const retry = document.getElementById('retryBiometricsBtn');
+      if (retry) retry.addEventListener('click', () => loadBiometrics());
+    }
+
+    function biometricsErrorHtml(detail, status) {
+      const safeDetail = escapeHtml(detail || '');
+      const authish = status === 401 || status === 403;
+      const lead = authish
+        ? 'Session expired or Oura needs reconnect.'
+        : 'Could not load biometrics.';
+      let html = '<div class="biometrics-error">' + lead;
+      if (safeDetail) html += ' <span class="muted">(' + safeDetail + ')</span>';
+      html += '<div class="biometrics-error-actions" style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.65rem;align-items:center;">'
+        + '<button type="button" class="secondary" id="retryBiometricsBtn">Try again</button>';
+      if (authish) {
+        html += '<a class="button secondary" href="/auth/oura/authorize" style="display:inline-flex;align-items:center;justify-content:center;min-height:44px;">Reconnect Oura</a>';
+      }
+      html += '</div></div>';
+      return html;
+    }
+
+    function biometricsNetworkErrorHtml() {
+      return '<div class="biometrics-error">Could not reach the server. Check your connection. '
+        + '<div class="biometrics-error-actions" style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.65rem;align-items:center;">'
+        + '<button type="button" class="secondary" id="retryBiometricsBtn">Try again</button>'
+        + '<a class="button secondary" href="/auth/oura/authorize" style="display:inline-flex;align-items:center;justify-content:center;min-height:44px;">Reconnect Oura</a>'
+        + '</div></div>';
+    }
+
+    function bindHistoryRetry() {
+      const retry = document.getElementById('historyRetryBtn');
+      if (retry) retry.addEventListener('click', () => loadHistory());
+      const first = document.getElementById('historyEmptyPlanBtn');
+      if (first) first.addEventListener('click', () => scrollToPlanCTA());
+    }
+
+    function renderHistoryEmptyNoPlans() {
+      historyEmpty.innerHTML =
+        '<svg class="history-empty-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">' +
+        '<path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/>' +
+        '</svg>' +
+        '<p class="history-empty-title">No plans yet</p>' +
+        '<p class="history-empty-desc">Generate a plan above—saved plans appear here for quick access.</p>' +
+        '<div style="margin-top:0.65rem;">' +
+        '<button type="button" class="secondary" id="historyEmptyPlanBtn">Get your first plan</button>' +
+        '</div>';
+      bindHistoryRetry();
+    }
+
+    function renderHistoryLoadError(status) {
+      const authish = status === 401 || status === 403;
+      let row = '<div style="margin-top:0.65rem;display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center;">'
+        + '<button type="button" class="secondary" id="historyRetryBtn">Try again</button>';
+      if (authish) {
+        row += '<a class="button secondary" href="/auth/oura/authorize" style="display:inline-flex;align-items:center;justify-content:center;min-height:44px;">Reconnect Oura</a>';
+      }
+      row += '</div>';
+      historyEmpty.innerHTML =
+        '<p class="history-empty-title">Couldn\'t load recent plans</p>' +
+        '<p class="history-empty-desc">' + (authish ? 'Your session may have expired.' : 'Check your connection and try again.') + '</p>' +
+        row;
+      bindHistoryRetry();
+    }
+
     function hideBiometricsFetchedAt() {
       const el = document.getElementById('biometricsFetchedAt');
       if (!el) return;
@@ -1547,7 +1627,7 @@
       } catch (_) {
         hasConnectedSession = false;
         trackEvent('connect_status_error', { source: 'check_connection' });
-        statusEl.textContent = 'Connect your Oura account to get personalized meal plans.';
+        statusEl.textContent = 'Could not verify your connection. Check your network, then connect Oura when you are online.';
         statusEl.classList.remove('loading');
         connectBtn.style.display = 'inline-block';
         actionsEl.style.display = 'none';
@@ -1627,19 +1707,18 @@
           updateBiometricsFetchedAt();
         } else {
           trackEvent('biometrics_load_failure', { status_code: r.status });
-          biometricsContent.innerHTML = 'Could not load biometrics. ' + (data.detail || r.statusText) + ' <button type="button" class="secondary" id="retryBiometricsBtn">Try again</button>';
+          const detail = (data && data.detail != null) ? data.detail : r.statusText;
+          biometricsContent.innerHTML = biometricsErrorHtml(detail, r.status);
           biometricsContent.classList.add('error');
           hideBiometricsFetchedAt();
-          const retry = document.getElementById('retryBiometricsBtn');
-          if (retry) retry.addEventListener('click', () => loadBiometrics());
+          bindBiometricsRetry();
         }
       } catch (e) {
         trackEvent('biometrics_load_error');
-        biometricsContent.innerHTML = 'Failed to load biometrics. <button type="button" class="secondary" id="retryBiometricsBtn">Try again</button>';
+        biometricsContent.innerHTML = biometricsNetworkErrorHtml();
         biometricsContent.classList.add('error');
         hideBiometricsFetchedAt();
-        const retry = document.getElementById('retryBiometricsBtn');
-        if (retry) retry.addEventListener('click', () => loadBiometrics());
+        bindBiometricsRetry();
       }
     }
 
@@ -1689,9 +1768,9 @@
           hasRecentWeeklyPlan = false;
           recentWeeklyPlanId = null;
           recentWeeklyDays = null;
-          historyEmpty.innerHTML = '<p class="history-empty-desc">No history yet.</p>';
-          historyEmpty.style.display = 'block';
           historyList.innerHTML = '';
+          renderHistoryLoadError(r.status);
+          historyEmpty.style.display = 'block';
           return;
         }
         const items = await r.json();
@@ -1702,7 +1781,13 @@
           hasRecentWeeklyPlan = false;
           recentWeeklyPlanId = null;
           recentWeeklyDays = null;
+          renderHistoryEmptyNoPlans();
           historyEmpty.style.display = 'block';
+          if (planMode === 'daily') {
+            getPlanBtn.textContent = "Get today's plan";
+          } else {
+            getPlanBtn.textContent = 'Get weekly plan';
+          }
           return;
         }
         // Completion loop: if today's daily plan is already available, users should view it instead of regenerating.
@@ -1785,9 +1870,9 @@
           historyList.appendChild(li);
         });
       } catch (_) {
-        historyEmpty.innerHTML = '<p class="history-empty-desc">Could not load history.</p>';
-        historyEmpty.style.display = 'block';
         historyList.innerHTML = '';
+        renderHistoryLoadError(0);
+        historyEmpty.style.display = 'block';
       }
     }
 

@@ -4,6 +4,8 @@ Hyper-personalized daily meal architect powered by your biometrics.
 Turns Oura/Apple Watch data into zero-decision meal plans + grocery lists.
 """
 
+import csv
+import io
 import logging
 import os
 import uuid
@@ -12,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Union
 
-from fastapi import FastAPI, Body, Query, HTTPException, Request
+from fastapi import FastAPI, Body, HTTPException, Query, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -73,6 +75,7 @@ from app.db import (
     save_support_issue_report,
     save_beta_analytics_event,
     get_beta_metrics_summary,
+    list_support_issue_reports,
     update_support_issue_triage,
 )
 
@@ -645,6 +648,59 @@ async def admin_beta_metrics(user_id: CurrentUserId):
     """Return beta funnel metrics and recent issue reports (auth required)."""
     _ = user_id
     return get_beta_metrics_summary()
+
+
+@app.get("/admin/beta-issues-export")
+async def admin_beta_issues_export(
+    user_id: CurrentUserId,
+    limit: int = Query(2000, ge=1, le=5000, description="Max rows, newest first."),
+):
+    """Download issue reports as CSV (auth required)."""
+    _ = user_id
+    rows = list_support_issue_reports(limit=limit)
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(
+        [
+            "issue_id",
+            "user_id",
+            "created_at",
+            "message",
+            "page",
+            "app_version",
+            "triage_severity",
+            "triage_status",
+            "triage_owner",
+            "triaged_at",
+            "resolved_at",
+            "last_response_at",
+            "response_note",
+        ]
+    )
+    for item in rows:
+        writer.writerow(
+            [
+                item.get("issue_id") or "",
+                item.get("user_id") if item.get("user_id") is not None else "",
+                item.get("created_at") or "",
+                item.get("message") or "",
+                item.get("page") or "",
+                item.get("app_version") or "",
+                item.get("triage_severity") or "",
+                item.get("triage_status") or "",
+                item.get("triage_owner") or "",
+                item.get("triaged_at") or "",
+                item.get("resolved_at") or "",
+                item.get("last_response_at") or "",
+                item.get("response_note") or "",
+            ]
+        )
+    filename = f"pulseplate-beta-issues-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}Z.csv"
+    return Response(
+        content="\ufeff" + buf.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.put("/admin/beta-issues/{issue_id}/triage")

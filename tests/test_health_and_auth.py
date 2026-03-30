@@ -479,6 +479,42 @@ def test_admin_beta_metrics_requires_auth(client):
     assert response.status_code == 401
 
 
+def test_admin_beta_issues_export_requires_auth(client):
+    response = client.get("/admin/beta-issues-export")
+    assert response.status_code == 401
+
+
+@patch("app.main.list_support_issue_reports")
+def test_admin_beta_issues_export_returns_csv(mock_list, auth_headers, client):
+    mock_list.return_value = [
+        {
+            "issue_id": "abc",
+            "user_id": 1,
+            "created_at": "2026-01-01T00:00:00Z",
+            "message": "hello, world",
+            "page": "/",
+            "app_version": "1",
+            "triage_severity": "P1",
+            "triage_status": "new",
+            "triage_owner": "",
+            "triaged_at": None,
+            "resolved_at": None,
+            "last_response_at": None,
+            "response_note": "note",
+        }
+    ]
+    response = client.get("/admin/beta-issues-export", headers=auth_headers)
+    assert response.status_code == 200
+    assert "text/csv" in (response.headers.get("content-type") or "").lower()
+    disposition = response.headers.get("content-disposition") or ""
+    assert "attachment" in disposition
+    assert "pulseplate-beta-issues-" in disposition
+    body = response.text
+    assert "issue_id" in body
+    assert "hello, world" in body
+    mock_list.assert_called_once()
+
+
 def test_admin_beta_page_requires_auth(client):
     response = client.get("/admin/beta")
     assert response.status_code == 401

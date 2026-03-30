@@ -737,6 +737,51 @@ def save_support_issue_report(
             )
 
 
+def _issue_row_to_dict(r: Any) -> dict[str, Any]:
+    """Map a support_issue_reports row tuple to API/export shape."""
+
+    def _to_iso(v: Any) -> str | None:
+        if v is None:
+            return None
+        return v.isoformat().replace("+00:00", "Z") if hasattr(v, "isoformat") else str(v)
+
+    return {
+        "issue_id": str(r[0]),
+        "user_id": int(r[1]) if r[1] is not None else None,
+        "message": str(r[2]),
+        "page": str(r[3]) if r[3] is not None else None,
+        "app_version": str(r[4]) if r[4] is not None else None,
+        "triage_severity": str(r[5]) if r[5] is not None else None,
+        "triage_status": str(r[6]) if r[6] is not None else "new",
+        "triage_owner": str(r[7]) if r[7] is not None else None,
+        "triaged_at": _to_iso(r[8]),
+        "resolved_at": _to_iso(r[9]),
+        "last_response_at": _to_iso(r[10]),
+        "response_note": str(r[11]) if r[11] is not None else None,
+        "created_at": _to_iso(r[12]) or "",
+    }
+
+
+def list_support_issue_reports(limit: int = 500) -> list[dict[str, Any]]:
+    """Return recent issue reports newest first (for dashboard and CSV export)."""
+    cap = max(1, min(int(limit), 5000))
+    with _get_conn() as conn:
+        cur = conn.cursor()
+        cur.execute(
+            _q(
+                """
+                SELECT issue_id, user_id, message, page, app_version, triage_severity, triage_status, triage_owner, triaged_at, resolved_at, last_response_at, response_note, created_at
+                FROM support_issue_reports
+                ORDER BY created_at DESC
+                LIMIT ?
+                """
+            ),
+            (cap,),
+        )
+        rows = cur.fetchall() or []
+    return [_issue_row_to_dict(r) for r in rows]
+
+
 def update_support_issue_triage(
     issue_id: str,
     severity: str | None = None,
@@ -818,15 +863,6 @@ def get_beta_metrics_summary() -> dict[str, Any]:
                 """
             )
             rows7 = cur.fetchall() or []
-            cur.execute(
-                """
-                SELECT issue_id, user_id, message, page, app_version, triage_severity, triage_status, triage_owner, triaged_at, resolved_at, last_response_at, response_note, created_at
-                FROM support_issue_reports
-                ORDER BY created_at DESC
-                LIMIT 20
-                """
-            )
-            issues = cur.fetchall() or []
         else:
             cur.execute(
                 """
@@ -848,26 +884,12 @@ def get_beta_metrics_summary() -> dict[str, Any]:
                 """
             )
             rows7 = cur.fetchall() or []
-            cur.execute(
-                """
-                SELECT issue_id, user_id, message, page, app_version, triage_severity, triage_status, triage_owner, triaged_at, resolved_at, last_response_at, response_note, created_at
-                FROM support_issue_reports
-                ORDER BY created_at DESC
-                LIMIT 20
-                """
-            )
-            issues = cur.fetchall() or []
 
     def _rows_to_map(rows: list[Any]) -> dict[str, int]:
         out: dict[str, int] = {}
         for r in rows:
             out[str(r[0])] = int(r[1] or 0)
         return out
-
-    def _to_iso(v: Any) -> str | None:
-        if v is None:
-            return None
-        return v.isoformat().replace("+00:00", "Z") if hasattr(v, "isoformat") else str(v)
 
     def _parse_ts(v: Any) -> float | None:
         if v is None:
@@ -888,24 +910,7 @@ def get_beta_metrics_summary() -> dict[str, Any]:
         except Exception:
             return None
 
-    recent_issue_reports = [
-        {
-            "issue_id": str(r[0]),
-            "user_id": int(r[1]) if r[1] is not None else None,
-            "message": str(r[2]),
-            "page": str(r[3]) if r[3] is not None else None,
-            "app_version": str(r[4]) if r[4] is not None else None,
-            "triage_severity": str(r[5]) if r[5] is not None else None,
-            "triage_status": str(r[6]) if r[6] is not None else "new",
-            "triage_owner": str(r[7]) if r[7] is not None else None,
-            "triaged_at": _to_iso(r[8]),
-            "resolved_at": _to_iso(r[9]),
-            "last_response_at": _to_iso(r[10]),
-            "response_note": str(r[11]) if r[11] is not None else None,
-            "created_at": _to_iso(r[12]) or "",
-        }
-        for r in issues
-    ]
+    recent_issue_reports = list_support_issue_reports(limit=20)
 
     now_ts = time.time()
     needs_reply_24h = 0
