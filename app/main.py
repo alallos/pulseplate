@@ -647,7 +647,13 @@ async def analytics_event(request: Request, payload: dict = Body(..., descriptio
 async def admin_beta_metrics(user_id: CurrentUserId):
     """Return beta funnel metrics and recent issue reports (auth required)."""
     _ = user_id
-    return get_beta_metrics_summary()
+    try:
+        return get_beta_metrics_summary()
+    except Exception as e:
+        # Defensive recovery for cases where deployed DB schema is behind.
+        log.warning("admin_beta_metrics first attempt failed; running init_db and retrying: %s", e)
+        init_db()
+        return get_beta_metrics_summary()
 
 
 @app.get("/admin/beta-issues-export")
@@ -657,7 +663,13 @@ async def admin_beta_issues_export(
 ):
     """Download issue reports as CSV (auth required)."""
     _ = user_id
-    rows = list_support_issue_reports(limit=limit)
+    try:
+        rows = list_support_issue_reports(limit=limit)
+    except Exception as e:
+        # Defensive recovery for cases where deployed DB schema is behind.
+        log.warning("admin_beta_issues_export first attempt failed; running init_db and retrying: %s", e)
+        init_db()
+        rows = list_support_issue_reports(limit=limit)
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(

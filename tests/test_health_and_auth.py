@@ -598,6 +598,34 @@ def test_admin_beta_metrics_returns_summary(mock_summary, auth_headers, client):
     assert data["triage_summary"]["needs_reply_24h"] == 1
 
 
+@patch("app.main.init_db")
+@patch("app.main.get_beta_metrics_summary")
+def test_admin_beta_metrics_retries_after_init_db(mock_summary, mock_init_db, auth_headers, client):
+    expected = {
+        "events_24h": {},
+        "events_7d": {},
+        "recent_issue_reports": [],
+        "triage_summary": {"unresolved_total": 0, "unresolved_p0": 0, "needs_reply_24h": 0},
+    }
+    mock_summary.side_effect = [Exception('relation "beta_analytics_events" does not exist'), expected]
+    response = client.get("/admin/beta-metrics", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json() == expected
+    assert mock_summary.call_count == 2
+    mock_init_db.assert_called_once()
+
+
+@patch("app.main.init_db")
+@patch("app.main.list_support_issue_reports")
+def test_admin_beta_issues_export_retries_after_init_db(mock_list, mock_init_db, auth_headers, client):
+    mock_list.side_effect = [Exception('relation "support_issue_reports" does not exist'), []]
+    response = client.get("/admin/beta-issues-export", headers=auth_headers)
+    assert response.status_code == 200
+    assert "text/csv" in (response.headers.get("content-type") or "").lower()
+    assert mock_list.call_count == 2
+    mock_init_db.assert_called_once()
+
+
 @patch("app.main.get_plans")
 def test_list_plans_returns_history(mock_get_plans, auth_headers, client):
     mock_get_plans.return_value = [
