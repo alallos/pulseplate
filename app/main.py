@@ -652,8 +652,17 @@ async def admin_beta_metrics(user_id: CurrentUserId):
     except Exception as e:
         # Defensive recovery for cases where deployed DB schema is behind.
         log.warning("admin_beta_metrics first attempt failed; running init_db and retrying: %s", e)
-        init_db()
-        return get_beta_metrics_summary()
+        try:
+            init_db()
+            return get_beta_metrics_summary()
+        except Exception as e2:
+            log.exception("admin_beta_metrics fallback to empty payload after retry failure: %s", e2)
+            return {
+                "events_24h": {},
+                "events_7d": {},
+                "recent_issue_reports": [],
+                "triage_summary": {"unresolved_total": 0, "unresolved_p0": 0, "needs_reply_24h": 0},
+            }
 
 
 @app.get("/admin/beta-issues-export")
@@ -668,8 +677,12 @@ async def admin_beta_issues_export(
     except Exception as e:
         # Defensive recovery for cases where deployed DB schema is behind.
         log.warning("admin_beta_issues_export first attempt failed; running init_db and retrying: %s", e)
-        init_db()
-        rows = list_support_issue_reports(limit=limit)
+        try:
+            init_db()
+            rows = list_support_issue_reports(limit=limit)
+        except Exception as e2:
+            log.exception("admin_beta_issues_export fallback to empty CSV after retry failure: %s", e2)
+            rows = []
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(
