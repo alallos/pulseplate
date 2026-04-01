@@ -269,6 +269,41 @@ def init_db() -> None:
                     pass
 
 
+def get_db_schema_health(autofix: bool = False) -> dict[str, Any]:
+    """Return readiness for required beta tables, optionally auto-fixing with init_db()."""
+    required = ("beta_analytics_events", "support_issue_reports")
+    exists: dict[str, bool] = {}
+    with _get_conn() as conn:
+        cur = conn.cursor()
+        for table in required:
+            if _use_pg:
+                cur.execute("SELECT to_regclass(?)", (f"public.{table}",))
+                row = cur.fetchone()
+                exists[table] = bool(row and row[0])
+            else:
+                cur.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                    (table,),
+                )
+                exists[table] = bool(cur.fetchone())
+    missing = [t for t in required if not exists.get(t)]
+    fixed = False
+    if autofix and missing:
+        init_db()
+        fixed = True
+        exists = get_db_schema_health(autofix=False).get("required_tables", {})
+        missing = [t for t in required if not exists.get(t)]
+    return {
+        "db_backend": "postgres" if _use_pg else "sqlite",
+        "ready": len(missing) == 0,
+        "required_tables": exists,
+        "missing_tables": missing,
+        "autofix_attempted": bool(autofix),
+        "autofix_changed": fixed,
+        "checked_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+    }
+
+
 def get_oura_tokens(user_id: int = DEFAULT_USER_ID) -> dict[str, Any] | None:
     """Return stored Oura tokens for the user, or None if not connected."""
     with _get_conn() as conn:

@@ -54,6 +54,7 @@ from app.services.oura_client import (
 )
 from app.db import (
     init_db,
+    get_db_schema_health,
     get_user_preferences,
     set_user_preferences,
     get_or_create_user_by_email,
@@ -129,6 +130,14 @@ limiter = Limiter(key_func=get_remote_address)
 async def lifespan(app: FastAPI):
     """Startup: init DB. Shutdown: optional cleanup."""
     init_db()
+    try:
+        schema = get_db_schema_health(autofix=True)
+        if schema.get("ready"):
+            log.info("db_schema_ready backend=%s", schema.get("db_backend"))
+        else:
+            log.error("db_schema_not_ready backend=%s missing=%s", schema.get("db_backend"), schema.get("missing_tables"))
+    except Exception:
+        log.exception("db_schema_health_check_failed")
     log.info("PulsePlate startup complete")
     yield
     # Shutdown: nothing to close for SQLite/Postgres per-request pattern
@@ -204,6 +213,13 @@ async def admin_beta_page(user_id: CurrentUserId):
     if page.exists():
         return FileResponse(page)
     raise HTTPException(status_code=404, detail="Not found")
+
+
+@app.get("/admin/db-health")
+async def admin_db_health(user_id: CurrentUserId):
+    """Report DB schema readiness for beta ops tables (auth required)."""
+    _ = user_id
+    return get_db_schema_health(autofix=False)
 
 
 @app.get("/manifest.webmanifest")
