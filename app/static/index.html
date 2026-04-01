@@ -2382,6 +2382,7 @@
     getPlanBtn.addEventListener('click', async () => {
       hideMessage();
       const isWeekly = planMode === 'weekly';
+      const requestStartedAtMs = Date.now();
       if (!isWeekly && hasTodayDailyPlan && todayDailyPlanId) {
         getPlanBtn.disabled = true;
         getPlanBtn.innerHTML = '<span class="spinner"></span> Opening today\'s plan…';
@@ -2451,7 +2452,11 @@
           data = {};
         }
         if (r.ok) {
-          trackEvent('plan_generate_success', { mode: data.days ? 'weekly' : 'daily', days: data.days ? (data.days.length || days) : 1 });
+          trackEvent('plan_generate_success', {
+            mode: data.days ? 'weekly' : 'daily',
+            days: data.days ? (data.days.length || days) : 1,
+            duration_ms: Math.max(0, Date.now() - requestStartedAtMs),
+          });
           if (data.days) {
             renderWeeklyPlan(data);
             showMessage(days + '-day plan ready.', 'success');

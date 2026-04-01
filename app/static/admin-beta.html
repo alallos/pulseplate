@@ -182,6 +182,13 @@
         <div class="kpi-sub" id="kpiUnresolved">Unresolved: -</div>
         <div class="kpi-sub" id="kpiNeedsReply">Needs reply (24h): -</div>
       </div>
+      <div class="card">
+        <div class="kpi-title">Go / No-Go (7d)</div>
+        <div class="kpi-value" id="kpiGoNoGo">-</div>
+        <div class="kpi-sub" id="kpiGoNoGoDetailA">Plan success: -</div>
+        <div class="kpi-sub" id="kpiGoNoGoDetailB">Connect success: -</div>
+        <div class="kpi-sub" id="kpiGoNoGoDetailC">Median open→plan: -</div>
+      </div>
     </div>
 
     <div class="row">
@@ -221,6 +228,10 @@
     const kpiIssueHint = document.getElementById('kpiIssueHint');
     const kpiUnresolved = document.getElementById('kpiUnresolved');
     const kpiNeedsReply = document.getElementById('kpiNeedsReply');
+    const kpiGoNoGo = document.getElementById('kpiGoNoGo');
+    const kpiGoNoGoDetailA = document.getElementById('kpiGoNoGoDetailA');
+    const kpiGoNoGoDetailB = document.getElementById('kpiGoNoGoDetailB');
+    const kpiGoNoGoDetailC = document.getElementById('kpiGoNoGoDetailC');
     const issuesList = document.getElementById('issuesList');
     const statusLine = document.getElementById('statusLine');
     const refreshBtn = document.getElementById('refreshBtn');
@@ -335,6 +346,8 @@
         const e7 = data.events_7d || {};
         const issues = Array.isArray(data.recent_issue_reports) ? data.recent_issue_reports : [];
         const triage = data.triage_summary || {};
+        const goNoGo = data.go_no_go || {};
+        const checks = goNoGo.checks || {};
 
         const starts24 = n(e24.plan_generate_started);
         const success24 = n(e24.plan_generate_success);
@@ -357,6 +370,18 @@
         kpiIssueHint.textContent = 'Recent reports: ' + String(issues.length);
         kpiUnresolved.textContent = 'Unresolved: ' + String(n(triage.unresolved_total)) + ' · P0: ' + String(n(triage.unresolved_p0));
         kpiNeedsReply.textContent = 'Needs reply (24h): ' + String(n(triage.needs_reply_24h));
+        kpiGoNoGo.textContent = goNoGo.ready ? 'Ready' : 'Not ready';
+        kpiGoNoGo.classList.toggle('ok', !!goNoGo.ready);
+        kpiGoNoGo.classList.toggle('error', !goNoGo.ready);
+        kpiGoNoGoDetailA.textContent = 'Plan success: '
+          + (checks.plan_success_rate_7d && checks.plan_success_rate_7d.value != null ? String(checks.plan_success_rate_7d.value) + '%' : '-')
+          + ' ' + (checks.plan_success_rate_7d && checks.plan_success_rate_7d.pass ? '✓' : '✗');
+        kpiGoNoGoDetailB.textContent = 'Connect success: '
+          + (checks.oura_connect_success_rate_7d && checks.oura_connect_success_rate_7d.value != null ? String(checks.oura_connect_success_rate_7d.value) + '%' : '-')
+          + ' ' + (checks.oura_connect_success_rate_7d && checks.oura_connect_success_rate_7d.pass ? '✓' : '✗');
+        kpiGoNoGoDetailC.textContent = 'Median open→plan: '
+          + (checks.median_open_to_plan_ms_7d && checks.median_open_to_plan_ms_7d.value != null ? String(checks.median_open_to_plan_ms_7d.value) + ' ms' : '-')
+          + ' ' + (checks.median_open_to_plan_ms_7d && checks.median_open_to_plan_ms_7d.pass ? '✓' : '✗');
 
         let visible = issues.slice();
         if (unresolvedOnly) visible = visible.filter(i => !isResolved(i));

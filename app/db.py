@@ -920,6 +920,31 @@ def get_beta_metrics_summary() -> dict[str, Any]:
             )
             rows7 = cur.fetchall() or []
 
+        if _use_pg:
+            cur.execute(
+                """
+                SELECT props_json
+                FROM beta_analytics_events
+                WHERE event_name = 'plan_generate_success'
+                  AND created_at >= NOW() - INTERVAL '7 days'
+                ORDER BY created_at DESC
+                LIMIT 2000
+                """
+            )
+            latency_rows = cur.fetchall() or []
+        else:
+            cur.execute(
+                """
+                SELECT props_json
+                FROM beta_analytics_events
+                WHERE event_name = 'plan_generate_success'
+                  AND datetime(created_at) >= datetime('now', '-7 days')
+                ORDER BY created_at DESC
+                LIMIT 2000
+                """
+            )
+            latency_rows = cur.fetchall() or []
+
     def _rows_to_map(rows: list[Any]) -> dict[str, int]:
         out: dict[str, int] = {}
         for r in rows:
@@ -946,6 +971,31 @@ def get_beta_metrics_summary() -> dict[str, Any]:
             return None
 
     recent_issue_reports = list_support_issue_reports(limit=20)
+    events_24h = _rows_to_map(rows24)
+    events_7d = _rows_to_map(rows7)
+
+    latency_samples: list[float] = []
+    for row in latency_rows:
+        raw = row[0] if row else None
+        try:
+            payload = json.loads(raw) if raw else {}
+        except Exception:
+            payload = {}
+        v = payload.get("duration_ms")
+        try:
+            fv = float(v)
+            if fv > 0:
+                latency_samples.append(fv)
+        except Exception:
+            continue
+    latency_samples.sort()
+    median_open_to_plan_ms = None
+    if latency_samples:
+        mid = len(latency_samples) // 2
+        if len(latency_samples) % 2:
+            median_open_to_plan_ms = float(latency_samples[mid])
+        else:
+            median_open_to_plan_ms = float((latency_samples[mid - 1] + latency_samples[mid]) / 2)
 
     now_ts = time.time()
     needs_reply_24h = 0
@@ -956,15 +1006,61 @@ def get_beta_metrics_summary() -> dict[str, Any]:
         if lr_ts is None or (now_ts - lr_ts) > (24 * 60 * 60):
             needs_reply_24h += 1
 
+    starts_7d = int(events_7d.get("plan_generate_started", 0))
+    success_7d = int(events_7d.get("plan_generate_success", 0))
+    plan_success_rate_7d = (100.0 * success_7d / starts_7d) if starts_7d > 0 else None
+
+    connect_ok_7d = int(events_7d.get("connect_status_ok", 0))
+    connect_attempts_7d = connect_ok_7d + int(events_7d.get("connect_status_not_connected", 0)) + int(events_7d.get("connect_status_error", 0))
+    connect_success_rate_7d = (100.0 * connect_ok_7d / connect_attempts_7d) if connect_attempts_7d > 0 else None
+
+    unresolved_p0 = sum(
+        1
+        for i in recent_issue_reports
+        if i["triage_status"] != "resolved" and (i["triage_severity"] or "") == "P0"
+    )
+    issue_reports_7d = int(events_7d.get("issue_report_submitted", 0))
+    support_loop_active = issue_reports_7d > 0 and needs_reply_24h == 0
+
+    go_no_go_checks = {
+        "plan_success_rate_7d": {
+            "value": round(plan_success_rate_7d, 1) if plan_success_rate_7d is not None else None,
+            "threshold": ">=95%",
+            "pass": (plan_success_rate_7d >= 95.0) if plan_success_rate_7d is not None else False,
+        },
+        "oura_connect_success_rate_7d": {
+            "value": round(connect_success_rate_7d, 1) if connect_success_rate_7d is not None else None,
+            "threshold": ">=90%",
+            "pass": (connect_success_rate_7d >= 90.0) if connect_success_rate_7d is not None else False,
+        },
+        "median_open_to_plan_ms_7d": {
+            "value": round(median_open_to_plan_ms, 0) if median_open_to_plan_ms is not None else None,
+            "threshold": "<=10000ms",
+            "pass": (median_open_to_plan_ms <= 10000.0) if median_open_to_plan_ms is not None else False,
+        },
+        "unresolved_p0": {"value": unresolved_p0, "threshold": "==0", "pass": unresolved_p0 == 0},
+        "support_reply_loop": {
+            "value": {"issue_reports_7d": issue_reports_7d, "needs_reply_24h": needs_reply_24h},
+            "threshold": "active",
+            "pass": support_loop_active,
+        },
+    }
+    go_no_go_ready = all(bool(v.get("pass")) for v in go_no_go_checks.values())
+
     return {
-        "events_24h": _rows_to_map(rows24),
-        "events_7d": _rows_to_map(rows7),
+        "events_24h": events_24h,
+        "events_7d": events_7d,
         "recent_issue_reports": recent_issue_reports,
+        "latency_summary": {
+            "samples_7d": len(latency_samples),
+            "median_open_to_plan_ms_7d": round(median_open_to_plan_ms, 0) if median_open_to_plan_ms is not None else None,
+        },
         "triage_summary": {
             "unresolved_total": sum(1 for i in recent_issue_reports if i["triage_status"] != "resolved"),
-            "unresolved_p0": sum(1 for i in recent_issue_reports if i["triage_status"] != "resolved" and (i["triage_severity"] or "") == "P0"),
+            "unresolved_p0": unresolved_p0,
             "needs_reply_24h": needs_reply_24h,
         },
+        "go_no_go": {"ready": go_no_go_ready, "checks": go_no_go_checks},
     }
 
 def get_user_preferences(user_id: int = DEFAULT_USER_ID) -> dict[str, Any]:
