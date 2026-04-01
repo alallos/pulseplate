@@ -314,7 +314,15 @@
           dbHealthChip.classList.remove('ready');
           dbHealthChip.classList.add('bad');
           dbHealthSummary = 'DB health unknown';
-          dbHealthNote.style.display = 'none';
+          if (dbHealthResp.status === 401) {
+            dbHealthNote.style.display = 'none';
+            dbHealthNote.textContent = '';
+            repairDbBtn.style.display = 'none';
+          } else {
+            dbHealthNote.textContent = 'DB health endpoint is unavailable. Try Repair DB schema, then refresh.';
+            dbHealthNote.style.display = 'block';
+            repairDbBtn.style.display = 'inline-block';
+          }
         } else {
           const health = await dbHealthResp.json();
           const ready = !!health.ready;
