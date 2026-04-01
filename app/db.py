@@ -1,6 +1,7 @@
 """Persistence for Oura tokens, user preferences, and plan history. Uses Postgres when DATABASE_URL is set, else SQLite."""
 
 import json
+import logging
 import os
 import sqlite3
 import time
@@ -16,6 +17,7 @@ _DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent / "pulseplate.db"
 DB_PATH = Path(os.getenv("PULSEPLATE_DB", str(_DEFAULT_DB_PATH)))
 
 DEFAULT_USER_ID = 1
+log = logging.getLogger(__name__)
 
 
 @contextmanager
@@ -277,7 +279,7 @@ def get_db_schema_health(autofix: bool = False) -> dict[str, Any]:
         cur = conn.cursor()
         for table in required:
             if _use_pg:
-                cur.execute("SELECT to_regclass(?)", (f"public.{table}",))
+                cur.execute("SELECT to_regclass(%s)", (f"public.{table}",))
                 row = cur.fetchone()
                 exists[table] = bool(row and row[0])
             else:
@@ -875,75 +877,79 @@ def update_support_issue_triage(
 
 def get_beta_metrics_summary() -> dict[str, Any]:
     """Return analytics event counts for last 24h/7d and recent issue reports."""
-    with _get_conn() as conn:
-        cur = conn.cursor()
-        if _use_pg:
-            cur.execute(
-                """
-                SELECT event_name, COUNT(*)::int
-                FROM beta_analytics_events
-                WHERE created_at >= NOW() - INTERVAL '24 hours'
-                GROUP BY event_name
-                ORDER BY event_name
-                """
-            )
-            rows24 = cur.fetchall() or []
-            cur.execute(
-                """
-                SELECT event_name, COUNT(*)::int
-                FROM beta_analytics_events
-                WHERE created_at >= NOW() - INTERVAL '7 days'
-                GROUP BY event_name
-                ORDER BY event_name
-                """
-            )
-            rows7 = cur.fetchall() or []
-        else:
-            cur.execute(
-                """
-                SELECT event_name, COUNT(*) as cnt
-                FROM beta_analytics_events
-                WHERE datetime(created_at) >= datetime('now', '-24 hours')
-                GROUP BY event_name
-                ORDER BY event_name
-                """
-            )
-            rows24 = cur.fetchall() or []
-            cur.execute(
-                """
-                SELECT event_name, COUNT(*) as cnt
-                FROM beta_analytics_events
-                WHERE datetime(created_at) >= datetime('now', '-7 days')
-                GROUP BY event_name
-                ORDER BY event_name
-                """
-            )
-            rows7 = cur.fetchall() or []
-
-        if _use_pg:
-            cur.execute(
-                """
-                SELECT props_json
-                FROM beta_analytics_events
-                WHERE event_name = 'plan_generate_success'
-                  AND created_at >= NOW() - INTERVAL '7 days'
-                ORDER BY created_at DESC
-                LIMIT 2000
-                """
-            )
-            latency_rows = cur.fetchall() or []
-        else:
-            cur.execute(
-                """
-                SELECT props_json
-                FROM beta_analytics_events
-                WHERE event_name = 'plan_generate_success'
-                  AND datetime(created_at) >= datetime('now', '-7 days')
-                ORDER BY created_at DESC
-                LIMIT 2000
-                """
-            )
-            latency_rows = cur.fetchall() or []
+    rows24: list[Any] = []
+    rows7: list[Any] = []
+    latency_rows: list[Any] = []
+    try:
+        with _get_conn() as conn:
+            cur = conn.cursor()
+            if _use_pg:
+                cur.execute(
+                    """
+                    SELECT event_name, COUNT(*)::int
+                    FROM beta_analytics_events
+                    WHERE created_at >= NOW() - INTERVAL '24 hours'
+                    GROUP BY event_name
+                    ORDER BY event_name
+                    """
+                )
+                rows24 = cur.fetchall() or []
+                cur.execute(
+                    """
+                    SELECT event_name, COUNT(*)::int
+                    FROM beta_analytics_events
+                    WHERE created_at >= NOW() - INTERVAL '7 days'
+                    GROUP BY event_name
+                    ORDER BY event_name
+                    """
+                )
+                rows7 = cur.fetchall() or []
+                cur.execute(
+                    """
+                    SELECT props_json
+                    FROM beta_analytics_events
+                    WHERE event_name = 'plan_generate_success'
+                      AND created_at >= NOW() - INTERVAL '7 days'
+                    ORDER BY created_at DESC
+                    LIMIT 2000
+                    """
+                )
+                latency_rows = cur.fetchall() or []
+            else:
+                cur.execute(
+                    """
+                    SELECT event_name, COUNT(*) as cnt
+                    FROM beta_analytics_events
+                    WHERE datetime(created_at) >= datetime('now', '-24 hours')
+                    GROUP BY event_name
+                    ORDER BY event_name
+                    """
+                )
+                rows24 = cur.fetchall() or []
+                cur.execute(
+                    """
+                    SELECT event_name, COUNT(*) as cnt
+                    FROM beta_analytics_events
+                    WHERE datetime(created_at) >= datetime('now', '-7 days')
+                    GROUP BY event_name
+                    ORDER BY event_name
+                    """
+                )
+                rows7 = cur.fetchall() or []
+                cur.execute(
+                    """
+                    SELECT props_json
+                    FROM beta_analytics_events
+                    WHERE event_name = 'plan_generate_success'
+                      AND datetime(created_at) >= datetime('now', '-7 days')
+                    ORDER BY created_at DESC
+                    LIMIT 2000
+                    """
+                )
+                latency_rows = cur.fetchall() or []
+    except Exception as e:
+        # Schema may be missing/behind; let admin endpoints degrade gracefully.
+        log.warning("beta metrics analytics query failed: %s", e)
 
     def _rows_to_map(rows: list[Any]) -> dict[str, int]:
         out: dict[str, int] = {}
@@ -970,7 +976,11 @@ def get_beta_metrics_summary() -> dict[str, Any]:
         except Exception:
             return None
 
-    recent_issue_reports = list_support_issue_reports(limit=20)
+    try:
+        recent_issue_reports = list_support_issue_reports(limit=20)
+    except Exception as e:
+        log.warning("beta metrics issue report query failed: %s", e)
+        recent_issue_reports = []
     events_24h = _rows_to_map(rows24)
     events_7d = _rows_to_map(rows7)
 
