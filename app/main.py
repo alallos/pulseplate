@@ -222,6 +222,14 @@ async def admin_db_health(user_id: CurrentUserId):
     return get_db_schema_health(autofix=False)
 
 
+@app.post("/admin/db-health/repair")
+async def admin_db_health_repair(user_id: CurrentUserId):
+    """Attempt DB schema repair for beta ops tables, then return readiness."""
+    _ = user_id
+    init_db()
+    return get_db_schema_health(autofix=False)
+
+
 @app.get("/manifest.webmanifest")
 async def manifest_webmanifest():
     """PWA manifest (referenced from index.html)."""

@@ -484,6 +484,11 @@ def test_admin_db_health_requires_auth(client):
     assert response.status_code == 401
 
 
+def test_admin_db_health_repair_requires_auth(client):
+    response = client.post("/admin/db-health/repair")
+    assert response.status_code == 401
+
+
 @patch("app.main.get_db_schema_health")
 def test_admin_db_health_returns_schema_readiness(mock_health, auth_headers, client):
     mock_health.return_value = {
@@ -500,6 +505,25 @@ def test_admin_db_health_returns_schema_readiness(mock_health, auth_headers, cli
     data = response.json()
     assert data["ready"] is True
     assert data["required_tables"]["beta_analytics_events"] is True
+    mock_health.assert_called_once_with(autofix=False)
+
+
+@patch("app.main.init_db")
+@patch("app.main.get_db_schema_health")
+def test_admin_db_health_repair_runs_init_and_returns_readiness(mock_health, mock_init_db, auth_headers, client):
+    mock_health.return_value = {
+        "db_backend": "postgres",
+        "ready": True,
+        "required_tables": {"beta_analytics_events": True, "support_issue_reports": True},
+        "missing_tables": [],
+        "autofix_attempted": False,
+        "autofix_changed": False,
+        "checked_at": "2026-04-01T00:00:00Z",
+    }
+    response = client.post("/admin/db-health/repair", headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json()["ready"] is True
+    mock_init_db.assert_called_once()
     mock_health.assert_called_once_with(autofix=False)
 
 

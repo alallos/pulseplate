@@ -159,6 +159,7 @@
       <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
         <a class="btn" href="/">Back to app</a>
         <button class="btn" id="refreshBtn" type="button">Refresh</button>
+        <button class="btn" id="repairDbBtn" type="button" style="display:none;">Repair DB schema</button>
         <button class="btn" id="exportCsvBtn" type="button">Export issues CSV</button>
       </div>
     </div>
@@ -223,6 +224,7 @@
     const issuesList = document.getElementById('issuesList');
     const statusLine = document.getElementById('statusLine');
     const refreshBtn = document.getElementById('refreshBtn');
+    const repairDbBtn = document.getElementById('repairDbBtn');
     const exportCsvBtn = document.getElementById('exportCsvBtn');
     const filterUnresolvedBtn = document.getElementById('filterUnresolvedBtn');
     const sortSeverityBtn = document.getElementById('sortSeverityBtn');
@@ -231,6 +233,29 @@
     let unresolvedOnly = true;
     let severityFirst = true;
     let dbHealthSummary = 'DB health unknown';
+
+    async function repairDbSchema() {
+      statusLine.textContent = 'Repairing DB schema...';
+      repairDbBtn.disabled = true;
+      const label = repairDbBtn.textContent;
+      repairDbBtn.textContent = 'Repairing...';
+      try {
+        const r = await fetch('/admin/db-health/repair', { method: 'POST', credentials: 'include' });
+        if (!r.ok) {
+          statusLine.textContent = r.status === 401
+            ? 'Not authorized. Log in to PulsePlate first.'
+            : 'DB repair failed.';
+          return;
+        }
+        statusLine.textContent = 'DB repair completed. Refreshing metrics...';
+        await loadMetrics();
+      } catch (_) {
+        statusLine.textContent = 'DB repair failed. Check connection and try again.';
+      } finally {
+        repairDbBtn.disabled = false;
+        repairDbBtn.textContent = label;
+      }
+    }
 
     function n(v) { return Number(v || 0); }
     function isResolved(item) { return String(item?.triage_status || 'new') === 'resolved'; }
@@ -292,9 +317,11 @@
           if (!ready) {
             dbHealthNote.textContent = 'Metrics may be incomplete until schema is fixed. Missing: ' + (missing.join(', ') || 'unknown');
             dbHealthNote.style.display = 'block';
+            repairDbBtn.style.display = 'inline-block';
           } else {
             dbHealthNote.style.display = 'none';
             dbHealthNote.textContent = '';
+            repairDbBtn.style.display = 'none';
           }
         }
         if (!metricsResp.ok) {
@@ -497,6 +524,7 @@
     }
 
     refreshBtn.addEventListener('click', loadMetrics);
+    repairDbBtn.addEventListener('click', repairDbSchema);
     exportCsvBtn.addEventListener('click', exportIssuesCsv);
     updateToolChipStates();
     loadMetrics();
