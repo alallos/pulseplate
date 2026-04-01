@@ -121,6 +121,26 @@
       border-color: rgba(88,166,255,0.9);
       background: rgba(88,166,255,0.2);
     }
+    .db-health-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 0.18rem 0.55rem;
+      font-size: 0.76rem;
+      margin-top: 0.35rem;
+      color: var(--muted);
+      background: rgba(255,255,255,0.03);
+    }
+    .db-health-chip.ready { color: var(--success); border-color: rgba(63,185,80,0.55); background: rgba(63,185,80,0.12); }
+    .db-health-chip.bad { color: var(--error); border-color: rgba(248,81,73,0.55); background: rgba(248,81,73,0.1); }
+    .db-health-note {
+      margin: 0.15rem 0 0.6rem;
+      font-size: 0.82rem;
+      color: var(--error);
+      display: none;
+    }
     @media (max-width: 800px) {
       .grid { grid-template-columns: 1fr; }
       .row { grid-template-columns: 1fr; }
@@ -133,6 +153,8 @@
       <div>
         <h1>Beta Ops</h1>
         <div class="muted">Daily triage view for funnel health, issues, and actions.</div>
+        <div id="dbHealthChip" class="db-health-chip">DB health: checking...</div>
+        <div id="dbHealthNote" class="db-health-note"></div>
       </div>
       <div style="display:flex; gap:0.45rem; flex-wrap:wrap;">
         <a class="btn" href="/">Back to app</a>
@@ -204,8 +226,11 @@
     const exportCsvBtn = document.getElementById('exportCsvBtn');
     const filterUnresolvedBtn = document.getElementById('filterUnresolvedBtn');
     const sortSeverityBtn = document.getElementById('sortSeverityBtn');
+    const dbHealthChip = document.getElementById('dbHealthChip');
+    const dbHealthNote = document.getElementById('dbHealthNote');
     let unresolvedOnly = true;
     let severityFirst = true;
+    let dbHealthSummary = 'DB health unknown';
 
     function n(v) { return Number(v || 0); }
     function isResolved(item) { return String(item?.triage_status || 'new') === 'resolved'; }
@@ -242,14 +267,43 @@
     async function loadMetrics() {
       statusLine.textContent = 'Refreshing...';
       try {
-        const r = await fetch('/admin/beta-metrics', { credentials: 'include' });
-        if (!r.ok) {
-          statusLine.textContent = r.status === 401
+        const [metricsResp, dbHealthResp] = await Promise.all([
+          fetch('/admin/beta-metrics', { credentials: 'include' }),
+          fetch('/admin/db-health', { credentials: 'include' }),
+        ]);
+        if (!dbHealthResp.ok) {
+          dbHealthChip.textContent = dbHealthResp.status === 401
+            ? 'DB health: not authorized'
+            : 'DB health: unavailable';
+          dbHealthChip.classList.remove('ready');
+          dbHealthChip.classList.add('bad');
+          dbHealthSummary = 'DB health unknown';
+          dbHealthNote.style.display = 'none';
+        } else {
+          const health = await dbHealthResp.json();
+          const ready = !!health.ready;
+          const missing = Array.isArray(health.missing_tables) ? health.missing_tables : [];
+          dbHealthChip.textContent = ready
+            ? 'DB health: ready'
+            : 'DB health: needs fix';
+          dbHealthChip.classList.toggle('ready', ready);
+          dbHealthChip.classList.toggle('bad', !ready);
+          dbHealthSummary = ready ? 'DB healthy' : ('DB missing: ' + (missing.join(', ') || 'unknown'));
+          if (!ready) {
+            dbHealthNote.textContent = 'Metrics may be incomplete until schema is fixed. Missing: ' + (missing.join(', ') || 'unknown');
+            dbHealthNote.style.display = 'block';
+          } else {
+            dbHealthNote.style.display = 'none';
+            dbHealthNote.textContent = '';
+          }
+        }
+        if (!metricsResp.ok) {
+          statusLine.textContent = metricsResp.status === 401
             ? 'Not authorized. Connect/login first.'
             : 'Could not load beta metrics.';
           return;
         }
-        const data = await r.json();
+        const data = await metricsResp.json();
         const e24 = data.events_24h || {};
         const e7 = data.events_7d || {};
         const issues = Array.isArray(data.recent_issue_reports) ? data.recent_issue_reports : [];
@@ -387,7 +441,7 @@
           });
         }
 
-        statusLine.textContent = 'Last refresh: ' + new Date().toLocaleString();
+        statusLine.textContent = 'Last refresh: ' + new Date().toLocaleString() + ' · ' + dbHealthSummary;
       } catch (_) {
         statusLine.textContent = 'Refresh failed. Check connection and try again.';
       }
@@ -433,7 +487,7 @@
         a.click();
         a.remove();
         URL.revokeObjectURL(url);
-        statusLine.textContent = 'CSV downloaded · Last refresh: ' + new Date().toLocaleString();
+        statusLine.textContent = 'CSV downloaded · Last refresh: ' + new Date().toLocaleString() + ' · ' + dbHealthSummary;
       } catch (_) {
         statusLine.textContent = 'Export failed. Check connection.';
       } finally {
