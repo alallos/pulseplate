@@ -698,8 +698,25 @@ def set_user_meal_feedback(user_id: int, feedback: dict[str, str]) -> None:
         if isinstance(k, str) and v in ("up", "down"):
             cleaned[k] = v
     payload = json.dumps(cleaned, separators=(",", ":"), ensure_ascii=False)
-    with _get_conn() as conn:
-        cur = conn.cursor()
+
+    def _is_missing_feedback_column_error(exc: Exception) -> bool:
+        msg = str(exc).lower()
+        return ("meal_feedback_json" in msg) and (
+            ("does not exist" in msg) or ("no such column" in msg)
+        )
+
+    def _ensure_feedback_column() -> None:
+        with _get_conn() as conn2:
+            cur2 = conn2.cursor()
+            if _use_pg:
+                cur2.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS meal_feedback_json TEXT")
+            else:
+                try:
+                    cur2.execute("ALTER TABLE users ADD COLUMN meal_feedback_json TEXT")
+                except sqlite3.OperationalError:
+                    pass
+
+    def _write(cur: Any) -> None:
         if _use_pg:
             cur.execute(
                 _q("UPDATE users SET meal_feedback_json = ?, updated_at = ? WHERE id = ?"),
@@ -723,6 +740,17 @@ def set_user_meal_feedback(user_id: int, feedback: dict[str, str]) -> None:
                 ),
                 (user_id, payload, now, now),
             )
+
+    with _get_conn() as conn:
+        cur = conn.cursor()
+        try:
+            _write(cur)
+        except Exception as e:
+            if not _is_missing_feedback_column_error(e):
+                raise
+            log.warning("meal_feedback_json missing; attempting schema repair")
+            _ensure_feedback_column()
+            _write(cur)
 
 
 def delete_user_data(user_id: int) -> None:
