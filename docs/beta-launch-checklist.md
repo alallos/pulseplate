@@ -8,10 +8,10 @@
   - [ ] Generate daily plan
   - [ ] Generate weekly plan
   - [ ] Save and reopen from history
-- [x] Mobile web shell hardening in-repo: `viewport-fit=cover`, safe-area padding, `100dvh`, 16px inputs (iOS zoom), 44px touch targets, tap highlight, service worker `v8`.
+- [x] Mobile web shell hardening in-repo: `viewport-fit=cover`, safe-area padding, `100dvh`, 16px inputs (iOS zoom), 44px touch targets, tap highlight, service worker `v9`.
 - [ ] Quick preference chips visibly affect generated plans.
 - [ ] Meal feedback (thumbs up/down) persists across sessions/devices.
-- [ ] Error and empty states provide a clear next action (retry/reconnect).
+- [x] Error and empty states provide a clear next action (retry/reconnect).
 
 ## 2) Reliability + Quality
 
@@ -27,10 +27,11 @@
 - [x] Sentry: `Starlette` + `FastAPI` + logging integrations; explicit capture on Grok/meal-gen failures and Oura token-exchange exceptions when `SENTRY_DSN` is set.
 - [x] Add user-facing issue reporting from the app (for fast beta triage).
 - [x] Structured server logging for support reports with request/user context.
-- [ ] Create a lightweight triage routine:
-  - [ ] Daily review of errors/support reports
-  - [ ] Severity tagging (P0/P1/P2)
-  - [ ] SLA target for beta replies (e.g., < 24h)
+- [x] Create a lightweight triage routine:
+  - [x] Daily review of errors/support reports
+  - [x] Severity tagging (P0/P1/P2)
+  - [x] SLA target for beta replies (e.g., < 24h)
+  - [x] Documented in `docs/beta-triage-routine.md`
 
 ## 4) Legal + Privacy
 
@@ -43,7 +44,7 @@
 ## 5) Beta Program Setup
 
 - [ ] Define beta segment (20-40 users to start).
-- [ ] Prepare invite + onboarding copy.
+- [x] Prepare invite + onboarding copy (`docs/beta-invite-and-onboarding-copy.md`, `docs/beta-ready-to-send-messages.md`).
 - [x] Add in-app feedback prompt after first successful plan generation.
 - [x] Create issue template for beta feedback collection (`.github/ISSUE_TEMPLATE/beta-feedback.yml`).
 
@@ -61,6 +62,7 @@
 - [ ] Median open-to-plan latency <= 10s on mobile.
 - [ ] Zero unresolved P0 issues.
 - [ ] Support report handling loop active and monitored.
+- [x] Instrument and surface these metrics in Beta Ops (`/admin/beta`) with readiness checks.
 
 ## Implementation Start (current sprint)
 
