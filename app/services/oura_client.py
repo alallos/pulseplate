@@ -1,6 +1,7 @@
 """Oura API v2 client: fetch biometric data and map to BiometricData."""
 
 import asyncio
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -11,6 +12,41 @@ from fastapi import HTTPException
 from app.models.biometrics import BiometricData
 
 OURA_API_BASE = "https://api.ouraring.com"
+log = logging.getLogger(__name__)
+
+
+def _oura_error_message(resp: httpx.Response, label: str) -> str:
+    """Build a short, user-safe error string (never dump upstream HTML pages)."""
+    code = resp.status_code
+    raw = (resp.text or "").strip()
+    low = raw[:800].lower()
+    if "<html" in low or "<!doctype" in low:
+        return (
+            f"Oura {label} returned HTTP {code} (service temporarily unavailable). "
+            "Please try again in a few minutes."
+        )
+    if code in (502, 503, 504):
+        return f"Oura {label} is temporarily unavailable (HTTP {code}). Please try again shortly."
+    try:
+        err = resp.json()
+        msg = err.get("detail") or err.get("message")
+        if isinstance(msg, str) and msg.strip():
+            return f"Oura {label}: {msg.strip()[:400]}"
+    except Exception:
+        pass
+    snippet = raw.replace("\n", " ").strip()
+    if len(snippet) > 200:
+        snippet = snippet[:200] + "…"
+    return f"Oura {label}: {snippet or f'HTTP {code}'}"
+
+
+def _status_for_oura_upstream(code: int) -> int:
+    """Map Oura/nginx outages to a stable client status."""
+    if code in (502, 503, 504):
+        return 503
+    if 400 <= code < 600:
+        return code
+    return 502
 
 
 async def fetch_oura_personal_info(access_token: str) -> dict[str, Any]:
@@ -25,14 +61,14 @@ async def fetch_oura_personal_info(access_token: str) -> dict[str, Any]:
             headers=headers,
         )
     if response.is_error:
-        try:
-            err = response.json()
-            msg = err.get("detail") or err.get("message") or response.text
-        except Exception:
-            msg = response.text or f"HTTP {response.status_code}"
+        log.warning(
+            "Oura personal_info error status=%s body_prefix=%s",
+            response.status_code,
+            (response.text or "")[:120].replace("\n", " "),
+        )
         raise HTTPException(
-            status_code=response.status_code if 400 <= response.status_code < 600 else 502,
-            detail=f"Oura personal_info: {msg}",
+            status_code=_status_for_oura_upstream(response.status_code),
+            detail=_oura_error_message(response, "personal_info"),
         )
     try:
         return response.json()
@@ -93,14 +129,15 @@ async def fetch_oura_biometrics(access_token: str) -> BiometricData:
 
     def check(resp: httpx.Response, name: str) -> dict[str, Any]:
         if resp.is_error:
-            try:
-                err = resp.json()
-                msg = err.get("detail") or err.get("message") or resp.text
-            except Exception:
-                msg = resp.text or f"HTTP {resp.status_code}"
+            log.warning(
+                "Oura %s error status=%s body_prefix=%s",
+                name,
+                resp.status_code,
+                (resp.text or "")[:120].replace("\n", " "),
+            )
             raise HTTPException(
-                status_code=resp.status_code if 400 <= resp.status_code < 600 else 502,
-                detail=f"Oura {name}: {msg}",
+                status_code=_status_for_oura_upstream(resp.status_code),
+                detail=_oura_error_message(resp, name),
             )
         try:
             return resp.json()
@@ -237,15 +274,14 @@ async def list_oura_webhook_subscriptions() -> list[dict[str, Any]]:
         )
 
     if resp.is_error:
-        try:
-            err = resp.json()
-            msg = err.get("detail") or err.get("message") or resp.text
-        except Exception:
-            msg = resp.text or f"HTTP {resp.status_code}"
-
+        log.warning(
+            "Oura webhook subscription list error status=%s body_prefix=%s",
+            resp.status_code,
+            (resp.text or "")[:120].replace("\n", " "),
+        )
         raise HTTPException(
-            status_code=resp.status_code if 400 <= resp.status_code < 600 else 502,
-            detail=f"Oura webhook subscription list: {msg}",
+            status_code=_status_for_oura_upstream(resp.status_code),
+            detail=_oura_error_message(resp, "webhook subscription list"),
         )
 
     try:
