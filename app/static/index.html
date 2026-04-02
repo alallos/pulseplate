@@ -134,6 +134,23 @@
       box-shadow: 0 14px 40px rgba(0,0,0,0.33);
       border-color: rgba(88, 166, 255, 0.35);
     }
+    /* Biometrics: slightly richer presentation for the hero metrics block */
+    #biometricsCard {
+      background: linear-gradient(165deg, rgba(26, 35, 50, 0.82) 0%, rgba(22, 30, 44, 0.78) 100%);
+      border-color: rgba(55, 70, 95, 0.95);
+      box-shadow:
+        0 12px 40px rgba(0, 0, 0, 0.32),
+        0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+    }
+    #biometricsCard:hover {
+      border-color: rgba(88, 166, 255, 0.28);
+    }
+    #biometricsCard h2 {
+      letter-spacing: 0.03em;
+      font-size: 0.92rem;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
     .status {
       font-size: 0.875rem;
       color: var(--muted);
@@ -297,60 +314,84 @@
     .grocery li { margin-bottom: 0.25rem; }
     .biometrics-hero {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 1.25rem;
-      margin-bottom: 1rem;
+      margin-bottom: 0;
       flex-wrap: wrap;
     }
+    /* Stack ring + label vertically; never fix height on wrapper (label was overlapping grid). */
     .score-ring-wrap {
-      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.5rem;
+      flex-shrink: 0;
+      width: 88px;
+    }
+    .score-ring {
       width: 88px;
       height: 88px;
       flex-shrink: 0;
-    }
-    .score-ring {
-      width: 100%;
-      height: 100%;
       border-radius: 50%;
       background: conic-gradient(var(--ring-color, var(--accent)) 0% var(--pct, 0%), rgba(45, 58, 77, 0.6) var(--pct, 0%) 100%);
       display: flex;
       align-items: center;
       justify-content: center;
       box-sizing: border-box;
+      box-shadow:
+        0 0 0 1px rgba(255, 255, 255, 0.06) inset,
+        0 8px 28px rgba(0, 0, 0, 0.35),
+        0 0 40px color-mix(in srgb, var(--ring-color, var(--accent)) 22%, transparent);
     }
     .score-ring-inner {
       width: 72px;
       height: 72px;
       border-radius: 50%;
-      background: var(--surface);
+      background: linear-gradient(165deg, rgba(26, 35, 50, 1) 0%, rgba(18, 24, 34, 0.98) 100%);
       display: flex;
       align-items: center;
       justify-content: center;
       font-weight: 700;
       font-size: 1.35rem;
+      font-variant-numeric: tabular-nums;
       color: var(--text);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25) inset;
     }
     .score-ring-label {
-      font-size: 0.8rem;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
       color: var(--muted);
-      margin-top: 0.25rem;
+      margin-top: 0;
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: 0.35rem;
+      text-align: center;
+      line-height: 1.25;
+      max-width: 120px;
+    }
+    .biometrics-metrics {
+      margin-top: 1.25rem;
+      padding-top: 1.1rem;
+      border-top: 1px solid rgba(45, 58, 77, 0.85);
+      background: linear-gradient(180deg, rgba(0, 0, 0, 0.08) 0%, transparent 0.65rem);
     }
     .biometrics-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
       gap: 0.75rem;
       font-size: 0.85rem;
-      margin-top: 0.2rem;
+      margin-top: 0;
     }
     .weekly-summary-box {
-      margin-top: 0.75rem;
-      padding: 0.6rem 0.75rem;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-      background: rgba(0,0,0,0.03);
+      margin-top: 0.85rem;
+      padding: 0.75rem 0.9rem;
+      border-radius: 10px;
+      border: 1px solid rgba(45, 58, 77, 0.9);
+      background: linear-gradient(165deg, rgba(0, 0, 0, 0.12) 0%, rgba(0, 0, 0, 0.04) 100%);
+      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.12);
     }
     .weekly-summary-title {
       font-size: 0.75rem;
@@ -367,19 +408,26 @@
       white-space: pre-wrap;
     }
     .biometric-item {
-      background: var(--bg);
-      padding: 0.5rem 0.75rem;
-      border-radius: 6px;
-      border: 1px solid var(--border);
+      background: linear-gradient(165deg, rgba(15, 20, 28, 0.92) 0%, rgba(15, 20, 28, 0.72) 100%);
+      padding: 0.55rem 0.8rem;
+      border-radius: 10px;
+      border: 1px solid rgba(45, 58, 77, 0.95);
       border-left: 3px solid var(--border);
-      transition: border-left-color 0.2s ease, box-shadow 0.2s ease;
+      transition: border-left-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+      box-shadow: 0 2px 14px rgba(0, 0, 0, 0.18);
     }
     .biometric-item.state-optimal { border-left-color: var(--success); }
     .biometric-item.state-good { border-left-color: rgba(63, 185, 80, 0.7); }
     .biometric-item.state-fair { border-left-color: var(--amber); }
     .biometric-item.state-low { border-left-color: var(--error); }
-    .biometric-item .label { color: var(--muted); font-size: 0.75rem; display: flex; align-items: center; gap: 0.35rem; }
-    .biometric-item .value { font-weight: 600; }
+    .biometric-item .label { color: var(--muted); font-size: 0.72rem; display: flex; align-items: center; gap: 0.35rem; font-weight: 500; letter-spacing: 0.02em; }
+    .biometric-item .value {
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .biometric-item.biometric-recovery .value {
+      text-transform: capitalize;
+    }
     .metric-icon {
       width: 14px;
       height: 14px;
@@ -877,9 +925,12 @@
         text-align: center;
       }
       .biometrics-hero {
-        margin-bottom: 1.15rem;
+        margin-bottom: 0;
       }
       .score-ring-wrap {
+        width: 96px;
+      }
+      .score-ring {
         width: 96px;
         height: 96px;
       }
@@ -887,13 +938,14 @@
         width: 78px;
         height: 78px;
       }
-      .score-ring-label {
-        margin-top: 0.45rem;
+      .biometrics-metrics {
+        margin-top: 1.1rem;
+        padding-top: 1rem;
       }
       .biometrics-grid {
         grid-template-columns: 1fr;
-        gap: 0.6rem;
-        margin-top: 0.35rem;
+        gap: 0.65rem;
+        margin-top: 0;
       }
       .biometric-item {
         padding: 0.65rem 0.8rem;
@@ -1687,11 +1739,12 @@
                 <div class="score-ring" style="--pct: ${sleepPct}%; --ring-color: ${ringColor};">
                   <div class="score-ring-inner">${sleepScore}</div>
                 </div>
-                <div class="score-ring-label">${iconMoon} Sleep score</div>
+                <div class="score-ring-label">${iconMoon}<span>Sleep score</span></div>
               </div>
             </div>
+            <div class="biometrics-metrics">
             <div class="biometrics-grid">
-              <div class="biometric-item${stateClass}"><span class="label">${iconHeart} Recovery</span><div class="value">${data.recovery_status}</div></div>
+              <div class="biometric-item biometric-recovery${stateClass}"><span class="label">${iconHeart} Recovery</span><div class="value">${data.recovery_status}</div></div>
               <div class="biometric-item"><span class="label">${iconActivity} HRV</span><div class="value">${data.hrv_ms} ms</div></div>
               <div class="biometric-item"><span class="label">${iconHeart} Resting HR</span><div class="value">${data.resting_hr_bpm} bpm</div></div>
               <div class="biometric-item"><span class="label">${iconFootsteps} Steps (yesterday)</span><div class="value">${data.steps_yesterday != null ? Number(data.steps_yesterday).toLocaleString() : '—'}</div></div>
@@ -1702,6 +1755,7 @@
                 <div class="weekly-summary-text">${formatWeeklySummary(data.weekly_summary)}</div>
               </div>
             ` : ''}
+            </div>
           `;
           biometricsActions.style.display = 'block';
           updateBiometricsFetchedAt();
